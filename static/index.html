@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 助手 - Code Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+</head>
+<body class="antialiased">
+    <div id="app" class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="header-icon">&lt;/&gt;</div>
+                <div>
+                    <h1 class="header-title">AI 助手</h1>
+                    <p class="header-subtitle" id="mode-subtitle">实用工具模式</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="mode-selector">
+                    <button id="btn-utility" class="mode-btn active" onclick="setMode('utility-skill')">工具</button>
+                    <button id="btn-reader" class="mode-btn" onclick="setMode('reader-skill')">文件</button>
+                </div>
+                <div id="action-buttons" class="action-buttons" style="display:none;">
+                    <button class="action-btn" onclick="regenerateLastResponse()" title="重新生成上一个回答">
+                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        重新生成
+                    </button>
+                    <button class="action-btn" onclick="clearMessages()" title="清空对话">
+                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        清空
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Chat Body -->
+        <div id="chat-body" class="chat-body">
+            <div class="chat-content">
+                <!-- Empty State -->
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-icon-container">
+                        <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    </div>
+                    <h2 id="empty-title" class="empty-title">实用工具助手</h2>
+                    <p id="empty-desc" class="empty-desc">处理确定性实用任务：数学计算、日期查询、文本转换、单位换算。模型会严格使用工具确保结果准确。</p>
+                    <div id="feature-grid" class="feature-grid"></div>
+                    <div class="info-box">
+                        <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        支持流式错误自动恢复，始终保障服务可用
+                    </div>
+                </div>
+
+                <!-- Messages Container -->
+                <div id="messages-container" class="messages-container" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer-container">
+            <div id="input-area" class="input-area">
+                <!-- File Upload -->
+                <div class="mb-2">
+                    <div id="file-upload-area" class="file-upload-area" onclick="document.getElementById('file-input').click()">
+                        <input type="file" id="file-input" multiple class="hidden" onchange="handleFileSelect(event)"
+                               accept=".py,.js,.ts,.jsx,.tsx,.go,.rs,.java,.md,.json,.yaml,.yml,.css,.scss,.sql,.sh,.bash,.html,.vue,.svelte,.c,.cpp,.h,.hpp,.rb,.php,.swift,.kt,.dart,.toml,.xml,.txt">
+                        <div class="text-center text-sm text-gray-500">
+                            <svg class="mx-auto mb-1 h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <span>拖拽代码文件到此处，或点击选择文件</span>
+                        </div>
+                    </div>
+                    <div id="file-list" class="file-list"></div>
+                </div>
+                <!-- Input -->
+                <div class="input-row">
+                    <textarea id="chat-input" placeholder="输入关于代码的问题… (Ctrl+Enter 发送)" rows="1"></textarea>
+                    <button id="send-btn" class="send-btn" onclick="handleSend()" title="发送 (Ctrl+Enter)">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+                <p class="text-center text-xs text-gray-400 mt-1.5">支持粘贴代码片段，或上传代码文件进行分析</p>
+            </div>
+            <div id="streaming-controls" class="streaming-controls" style="display:none;">
+                <button class="stop-btn" onclick="cancelStream()">
+                    <svg class="stop-icon" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
+                    停止生成
+                </button>
+            </div>
+            <div id="retry-status" class="retry-status" style="display:none;">
+                <svg class="spinner" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                正在尝试恢复，请稍候...
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

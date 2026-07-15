@@ -5,6 +5,8 @@ export interface AIInputEditorRef {
     clear: () => void
     setValue: (text: string) => void
     insertToolReference: (toolName: string) => void
+    insertSkillReference: (skillName: string) => void
+    insertDocReference: (docUri: string) => void
     getText: () => string
     getStructuredRequest: () => StructuredRequest
     isEmpty: () => boolean
@@ -56,6 +58,12 @@ const AIInputEditor = forwardRef<AIInputEditorRef, Props>(({ placeholder, slashC
         },
         insertToolReference: (toolName: string) => {
             insertChip({ label: toolName, type: 'tool', desc: '', data: { toolName } })
+        },
+        insertSkillReference: (skillName: string) => {
+            insertChip({ label: skillName, type: 'skill', desc: '', data: { skillName } })
+        },
+        insertDocReference: (docUri: string) => {
+            insertChip({ label: docUri, type: 'doc', desc: '', data: { uri: docUri } })
         },
         getText: () => getText(),
         getStructuredRequest: () => getStructuredRequest(),
@@ -279,6 +287,8 @@ const AIInputEditor = forwardRef<AIInputEditorRef, Props>(({ placeholder, slashC
     const getHandle = () => ({
         clear: () => { editorRef.current!.innerHTML = ''; chipsRef.current = []; updatePlaceholder(); hideAllMenus() },
         insertToolReference: (toolName: string) => insertChip({ label: toolName, type: 'tool', desc: '', data: { toolName } }),
+        insertSkillReference: (skillName: string) => insertChip({ label: skillName, type: 'skill', desc: '', data: { skillName } }),
+        insertDocReference: (docUri: string) => insertChip({ label: docUri, type: 'doc', desc: '', data: { uri: docUri } }),
         setValue: (text: string) => { if (editorRef.current) { editorRef.current.textContent = text; updatePlaceholder() } },
     })
 

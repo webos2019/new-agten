@@ -99,6 +99,8 @@ def create_resource_end_chunk(
         chunk["serverId"] = server_id
     if content_preview is not None:
         chunk["contentPreview"] = content_preview
+    if content_preview is not None:
+        chunk["contentPreview"] = content_preview
     chunk["isTruncated"] = is_truncated
     if preview_chars is not None:
         chunk["previewChars"] = preview_chars
@@ -161,3 +163,60 @@ def create_recovery_fallback_chunk(
 
 def create_done_chunk() -> dict[str, Any]:
     return {"type": "done"}
+
+
+# ─── Agent Step Chunks ──────────────────────────────────
+
+# Agent 步骤类型
+AGENT_STEP_ACTIONS = [
+    "read_resource",       # 读取用户引用的版本方案
+    "plan_extract",        # 从版本方案中提取结构化依据
+    "draft_tasklist",      # 生成第一版 tasklist 草稿
+    "validate_tasklist",   # 确定性结构校验
+    "revise_tasklist",     # 自动修正（最多一次）
+    "final_answer",        # 最终输出
+]
+
+
+def create_agent_step_start_chunk(
+    run_id: str,
+    step_index: int,
+    action_type: str,
+    title: str,
+    agent_name: str = "tasklist-agent",
+    part_id: str | None = None,
+) -> dict[str, Any]:
+    chunk: dict[str, Any] = {
+        "type": "agent_step_start",
+        "runId": run_id,
+        "stepIndex": step_index,
+        "actionType": action_type,
+        "title": title,
+        "agentName": agent_name,
+    }
+    if part_id:
+        chunk["partId"] = part_id
+    return chunk
+
+
+def create_agent_step_end_chunk(
+    run_id: str,
+    step_index: int,
+    status: str,  # "success" | "error" | "skipped"
+    summary: str | None = None,
+    duration_ms: int | None = None,
+    part_id: str | None = None,
+) -> dict[str, Any]:
+    chunk: dict[str, Any] = {
+        "type": "agent_step_end",
+        "runId": run_id,
+        "stepIndex": step_index,
+        "status": status,
+    }
+    if summary is not None:
+        chunk["summary"] = summary
+    if duration_ms is not None:
+        chunk["durationMs"] = duration_ms
+    if part_id:
+        chunk["partId"] = part_id
+    return chunk

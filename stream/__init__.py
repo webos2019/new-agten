@@ -13,6 +13,9 @@ from .protocol import (
     create_recovering_chunk,
     create_recovery_fallback_chunk,
     create_done_chunk,
+    create_agent_step_start_chunk,
+    create_agent_step_end_chunk,
+    AGENT_STEP_ACTIONS,
 )
 from .lifecycle import StreamLifecycle, StreamWriter, create_id, create_ndjson_stream
 
@@ -29,6 +32,9 @@ __all__ = [
     "create_recovering_chunk",
     "create_recovery_fallback_chunk",
     "create_done_chunk",
+    "create_agent_step_start_chunk",
+    "create_agent_step_end_chunk",
+    "AGENT_STEP_ACTIONS",
     "StreamLifecycle",
     "StreamWriter",
     "create_id",

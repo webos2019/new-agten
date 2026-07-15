@@ -22,6 +22,14 @@ export interface ChatBlock {
     serverId?: string
     isTruncated?: boolean
     previewChars?: number
+    // Agent step fields
+    actionType?: string
+    title?: string
+    stepIndex?: number
+    status?: string
+    summary?: string
+    durationMs?: number
+    runId?: string
 }
 
 export interface ChatMessage {
@@ -58,6 +66,8 @@ export interface AtReference {
 export interface AIInputEditorHandle {
     clear(): void
     insertToolReference(toolName: string): void
+    insertSkillReference(skillName: string): void
+    insertDocReference(docUri: string): void
     setValue(text: string): void
 }
 
@@ -68,12 +78,18 @@ export const slashCommands: SlashCommand[] = [
       action: (ed) => { /* handled in App */ (window as any).__setMode?.('utility-skill'); ed.clear(); } },
     { label: '切换文件模式', icon: '📁', desc: '切换到文件与天气技能', alias: ['file', '文件', 'reader'],
       action: (ed) => { (window as any).__setMode?.('reader-skill'); ed.clear(); } },
+    { label: '生成任务清单', icon: '📋', desc: '基于版本方案生成 Tasklist 草稿', alias: ['tasklist', 'task', '任务'],
+      action: (ed) => { ed.insertSkillReference('tasklist'); } },
     { label: '引用计算器', icon: '🔢', desc: '插入计算器工具引用', alias: ['calc', '计算'],
       action: (ed) => { ed.insertToolReference('calculator'); } },
     { label: '引用天气查询', icon: '🌤', desc: '插入天气工具引用', alias: ['weather', '天气'],
       action: (ed) => { ed.insertToolReference('get_weather'); } },
     { label: '引用文件读取', icon: '📄', desc: '插入文件读取引用', alias: ['read', '文件读取'],
       action: (ed) => { ed.insertToolReference('local-text-read'); } },
+    { label: '引用版本方案 v0.1.0', icon: '📑', desc: 'docs://versions/v0.1.0-controlled-tasklist-agent.md', alias: ['version', '版本', 'v0.1'],
+      action: (ed) => { ed.insertDocReference('docs://versions/v0.1.0-controlled-tasklist-agent.md'); } },
+    { label: '引用版本方案 v0.2.0', icon: '📑', desc: 'docs://versions/v0.2.0-agent-trace-panel.md', alias: ['version', '版本', 'v0.2'],
+      action: (ed) => { ed.insertDocReference('docs://versions/v0.2.0-agent-trace-panel.md'); } },
     { label: '清空对话', icon: '🗑', desc: '清空当前对话历史', alias: ['clear', '清空'],
       action: (ed) => { (window as any).__clearMessages?.(); ed.clear(); } },
 ]
@@ -88,6 +104,8 @@ export const atReferences: AtReference[] = [
     { label: 'web_browse', type: 'tool', desc: '网页浏览', keywords: ['web', '网页', 'url', 'browse'] },
     { label: 'local-text-read', type: 'tool', desc: '本地文件读取', keywords: ['file', '文件', 'read'] },
     { label: 'list_files', type: 'tool', desc: '目录列表', keywords: ['list', '目录', 'files'] },
+    { label: 'docs://versions/v0.1.0-controlled-tasklist-agent.md', type: 'doc', desc: '版本方案 v0.1.0', keywords: ['version', '版本', 'v0.1', 'tasklist', 'agent'] },
+    { label: 'docs://versions/v0.2.0-agent-trace-panel.md', type: 'doc', desc: '版本方案 v0.2.0', keywords: ['version', '版本', 'v0.2', 'trace', 'panel'] },
     { label: '当前IP', type: 'context', desc: '引用客户端IP地址' },
     { label: '对话历史', type: 'context', desc: '引用最近的对话历史' },
     { label: 'utility-skill', type: 'skill', desc: '工具技能模式' },

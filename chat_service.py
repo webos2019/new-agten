@@ -44,16 +44,24 @@ class ChatService:
         if not isinstance(messages, list):
             raise ValueError("messages 必须是数组")
 
+        # 提取结构化请求 (Composer chips/segments)
         user_message = ""
+        structured = None
         if messages:
             user_message = messages[-1].get("content", "")
+            structured = messages[-1].get("structured")
 
         resolved_skill = resolve_skill(skill, user_message)
 
         session = create_chat_session(resolved_skill, messages)
 
+        # 将结构化请求传入 context，供 Agent Runtime 检测
+        agent_context = {"clientIP": client_ip_req}
+        if structured:
+            agent_context["structured"] = structured
+
         async def on_start(writer: StreamWriter) -> None:
-            await orchestrate_chat(session, writer, {"clientIP": client_ip_req})
+            await orchestrate_chat(session, writer, agent_context)
 
         async for chunk_line in create_ndjson_stream(on_start):
             yield chunk_line

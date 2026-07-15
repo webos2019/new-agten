@@ -54,6 +54,40 @@ export function useChat() {
                 case 'recovery_fallback':
                     next.push({ type: 'text', content: '📌 ' + chunk.message + ' (' + chunk.fallbackMethod + ')' })
                     break
+                case 'agent_step_start': {
+                    const lastStep = next[next.length - 1]
+                    if (lastStep && lastStep.type === 'agent_step' && lastStep.runId === chunk.runId && lastStep.status === 'pending') {
+                        // Update existing pending step
+                        lastStep.actionType = chunk.actionType
+                        lastStep.title = chunk.title
+                        lastStep.stepIndex = chunk.stepIndex
+                    } else {
+                        next.push({
+                            type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex,
+                            actionType: chunk.actionType, title: chunk.title, status: 'pending',
+                            content: '',
+                        })
+                    }
+                    break
+                }
+                case 'agent_step_end': {
+                    // Find the matching pending step and update it
+                    const matchingStep = [...next].reverse().find(
+                        b => b.type === 'agent_step' && b.runId === chunk.runId && b.stepIndex === chunk.stepIndex
+                    )
+                    if (matchingStep) {
+                        matchingStep.status = chunk.status
+                        matchingStep.summary = chunk.summary
+                        matchingStep.durationMs = chunk.durationMs
+                    } else {
+                        next.push({
+                            type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex,
+                            status: chunk.status, summary: chunk.summary, durationMs: chunk.durationMs,
+                            content: '',
+                        })
+                    }
+                    break
+                }
             }
             return next
         })
@@ -145,6 +179,11 @@ export function useChat() {
                             isValid: chunk.isValid, resourceName: chunk.resourceName,
                             resourceUri: chunk.resourceUri, serverId: chunk.serverId,
                             isTruncated: chunk.isTruncated, previewChars: chunk.previewChars,
+                            // Agent step fields
+                            actionType: chunk.actionType, title: chunk.title,
+                            stepIndex: chunk.stepIndex, status: chunk.status,
+                            summary: chunk.summary, durationMs: chunk.durationMs,
+                            runId: chunk.runId,
                         })
                         if (chunk.type === 'done') isDone = true
                     } catch { /* skip */ }

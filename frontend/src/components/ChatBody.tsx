@@ -151,6 +151,33 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
                     </div>
                 </div>
             )
+        case 'agent_step': {
+            const stepIcon = block.status === 'success' ? '✓' : block.status === 'error' ? '✗' : block.status === 'pending' ? '⟳' : '•'
+            const stepColor = block.status === 'success' ? 'var(--green-ok)' : block.status === 'error' ? 'var(--red-err)' : 'var(--cyan)'
+            return (
+                <div key={key} className="agent-step-block">
+                    <div className="agent-step-header">
+                        <span className="agent-step-icon" style={{ color: stepColor }}>{stepIcon}</span>
+                        <span className="agent-step-title">{block.title || block.actionType || 'Agent 步骤'}</span>
+                        {block.durationMs != null && (
+                            <span className="agent-step-duration">{block.durationMs}ms</span>
+                        )}
+                        {block.status === 'pending' && (
+                            <span className="agent-step-badge pending">执行中</span>
+                        )}
+                        {block.status === 'success' && (
+                            <span className="agent-step-badge success">完成</span>
+                        )}
+                        {block.status === 'error' && (
+                            <span className="agent-step-badge error">失败</span>
+                        )}
+                    </div>
+                    {block.summary && (
+                        <div className="agent-step-summary">{block.summary}</div>
+                    )}
+                </div>
+            )
+        }
         case 'text':
             return <div key={key} className="text-block" dangerouslySetInnerHTML={{ __html: renderMarkdown(block.content || '') }} />
         default:

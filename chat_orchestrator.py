@@ -17,11 +17,115 @@ from stream import (
     create_tool_result_chunk,
     create_recovering_chunk,
     create_recovery_fallback_chunk,
+    create_agent_step_start_chunk,
+    create_agent_step_end_chunk,
+)
+from agent_runtime import (
+    AgentState,
+    run_tasklist_agent,
+    resolve_version_plan_uri,
+    VERSION_PLAN_URI_PATTERN,
 )
 
 MAX_TOOL_CALLS = 5
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAY_MS = 2.0  # seconds
+
+
+# ─── Agent 入口检测 ─────────────────────────────────────
+
+async def _try_agent_entry(
+    session: ChatSession,
+    writer: StreamWriter,
+    lifecycle: StreamLifecycle,
+    context: dict[str, Any],
+) -> bool:
+    """
+    Agent 受控入口检测。
+    命中条件: /tasklist 命令 + @docs://versions/*.md 引用
+    返回 True 表示命中 Agent 路径并已执行, False 表示不命中。
+    """
+    structured = context.get("structured")
+    if not structured:
+        return False
+
+    chips = structured.get("chips", [])
+    segments = structured.get("segments", [])
+
+    # 检测 /tasklist 命令
+    has_tasklist_command = any(
+        seg.get("type") == "chip" and seg.get("chipType") == "skill"
+        and "tasklist" in seg.get("label", "",).lower()
+        for seg in segments
+    ) or any(
+        chip.get("type") == "skill" and "tasklist" in chip.get("label", "",).lower()
+        for chip in chips
+    )
+
+    # 也检查 rawText 中是否包含 /tasklist
+    raw_text = structured.get("rawText", "",)
+    if not has_tasklist_command and "/tasklist" not in raw_text.lower():
+        return False
+
+    # 检测 @docs://versions/*.md 引用
+    version_plan_uri = None
+    for seg in segments:
+        if seg.get("type") == "chip":
+            label = seg.get("label", "",)
+            if VERSION_PLAN_URI_PATTERN.match(label):
+                version_plan_uri = label
+                break
+            data = seg.get("data", {})
+            if isinstance(data, dict) and data.get("uri"):
+                if VERSION_PLAN_URI_PATTERN.match(data["uri"]):
+                    version_plan_uri = data["uri"]
+                    break
+    for chip in chips:
+        if not version_plan_uri:
+            label = chip.get("label", "",)
+            if VERSION_PLAN_URI_PATTERN.match(label):
+                version_plan_uri = label
+                break
+            data = chip.get("data", {})
+            if isinstance(data, dict) and data.get("uri"):
+                if VERSION_PLAN_URI_PATTERN.match(data["uri"]):
+                    version_plan_uri = data["uri"]
+                    break
+
+    # 也检查 rawText 中是否有 docs://versions/ 引用
+    if not version_plan_uri:
+        uri_match = VERSION_PLAN_URI_PATTERN.search(raw_text)
+        if uri_match:
+            version_plan_uri = uri_match.group(0)
+
+    if not version_plan_uri:
+        # 命中 /tasklist 但缺少版本方案引用 → 明确提示
+        lifecycle.write_chunk(create_text_chunk(
+            "⚠️ 请先通过 @ 引用一个 `docs://versions/*.md` 版本方案，再生成 tasklist 草稿。\n\n"
+            "本版不支持只根据目标直接生成 tasklist。\n\n"
+            "可用版本方案:\n"
+            + "\n".join(
+                f"  - `{p['uri']}`"
+                for p in _list_version_plans()
+            )
+        ))
+        lifecycle.emit_done_once()
+        return True  # 命中但缺少引用，仍然短路
+
+    # ── 进入 Agent 路径 ──
+    state = AgentState(
+        run_id=create_id(),
+        version_plan_uri=version_plan_uri,
+    )
+
+    await run_tasklist_agent(state, writer, lifecycle)
+    lifecycle.emit_done_once()
+    return True
+
+
+def _list_version_plans() -> list[dict[str, str]]:
+    from agent_runtime import list_available_version_plans
+    return list_available_version_plans()
 
 
 async def orchestrate_chat(
@@ -38,6 +142,11 @@ async def orchestrate_chat(
 
     while recovery_attempts <= MAX_RETRY_ATTEMPTS:
         try:
+            # ── Agent 受控分支 (最优先) ──
+            if await _try_agent_entry(session, writer, lifecycle, context):
+                lifecycle.close()
+                return
+
             await _do_orchestrate(session, writer, context, lifecycle)
             lifecycle.close()
             return

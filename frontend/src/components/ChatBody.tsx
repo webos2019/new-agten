@@ -239,7 +239,11 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
                 <div className="chat-content">
                     <div className="empty-state">
                         <div className="empty-icon-container">
-                            <svg className="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                            <svg className="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2L2 7l10 5 10-5-10-5z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 17l10 5 10-5" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12l10 5 10-5" />
+                            </svg>
                         </div>
                         <h2 className="empty-title">{mode === 'utility-skill' ? '实用工具助手' : '文件与天气助手'}</h2>
                         <p className="empty-desc">
@@ -251,7 +255,7 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
                             {features.map((f, i) => (
                                 <div key={i} className="feature-card">
                                     <div className={`feature-icon-container ${mode === 'reader-skill' ? 'feature-icon-purple' : ''}`}>
-                                        <svg className="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                        <svg className="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                     </div>
                                     <h3 className="feature-title">{f.title}</h3>
                                     <p className="feature-desc">{f.desc}</p>

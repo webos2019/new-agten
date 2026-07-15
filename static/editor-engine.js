@@ -39,9 +39,10 @@ class AIInputEditor {
 
         this.editor = document.createElement('div');
         this.editor.className = 'ai-editor-content';
-        this.editor.contentEditable = 'true';
+        this.editor.setAttribute('contenteditable', 'true');
         this.editor.setAttribute('role', 'textbox');
         this.editor.setAttribute('aria-multiline', 'true');
+        this.editor.setAttribute('tabindex', '0');
         this.container.appendChild(this.editor);
 
         this.slashMenu = document.createElement('div');
@@ -67,6 +68,11 @@ class AIInputEditor {
             e.preventDefault();
             this.container.classList.remove('dragover');
             if (this.options.onFileDrop) this.options.onFileDrop(e.dataTransfer.files);
+        });
+
+        // Click on container focuses the editor
+        this.container.addEventListener('click', () => {
+            this.editor.focus();
         });
     }
 

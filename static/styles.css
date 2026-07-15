@@ -361,8 +361,8 @@ body {
 /* ─── AI Input Editor (Tiptap-style) ─────────────────── */
 .ai-editor-container {
     position: relative; display: flex; flex-direction: column;
-    border-radius: 0.75rem; border: 1px solid #d1d5db;
-    background-color: #fff; padding: 0.75rem 1rem;
+    border-radius: 0.75rem !important; border: 1px solid #d1d5db !important;
+    background-color: #fff !important; padding: 0.75rem 1rem !important;
     transition: border-color 150ms; min-height: 60px;
 }
 .ai-editor-container:focus-within { border-color: #3b82f6; }
@@ -375,9 +375,12 @@ body {
 }
 
 .ai-editor-content {
-    flex: 1; outline: none; font-size: 0.875rem; color: #111827;
+    flex: 1; outline: none; font-size: 0.875rem; color: #111827 !important;
     line-height: 1.6; min-height: 24px; max-height: 200px; overflow-y: auto;
     word-break: break-word; white-space: pre-wrap;
+    cursor: text !important; user-select: text !important; -webkit-user-select: text !important;
+    background-color: #fff !important; caret-color: #111827;
+    display: block; z-index: 1; position: relative;
 }
 
 /* Inline Chip */
@@ -444,3 +447,19 @@ body {
     transition: border-color 150ms;
 }
 .ai-editor-input-row:focus-within { border-color: #3b82f6; }
+
+/* Editor container (mounted by JS) */
+#editor-container {
+    min-height: 60px !important;
+    width: 100% !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 0.75rem !important;
+    background-color: #fff !important;
+    padding: 0.75rem 1rem !important;
+    transition: border-color 150ms;
+    box-sizing: border-box !important;
+    display: block !important;
+}
+#editor-container:focus-within {
+    border-color: #3b82f6 !important;
+}

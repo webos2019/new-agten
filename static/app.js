@@ -186,12 +186,46 @@ function removeFile(index) {
 function renderFileList() {
     const list = document.getElementById('file-list');
     if (!list) return;
-    list.innerHTML = uploadedFiles.map((f, i) => '<div class="file-item"><svg class="h-4 w-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="file-item-name">' + f.name + '</span><span class="text-xs text-gray-400 flex-shrink-0">' + formatSize(f.size) + '</span><button class="file-item-remove" onclick="removeFile(' + i + ')"><svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>').join('');
+    list.innerHTML = uploadedFiles.map((f, i) => '<div class="file-item"><svg class="h-4 w-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="file-item-name">' + f.name + '</span><span class="text-xs text-gray-400 flex-shrink-0">' + formatSize(f.size) + '</span><button class="file-item-remove" onclick="removeFile(' + i + ')"><svg class w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>').join('');
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 function renderMessage(msg, isStreaming, sText, sBlocks) {
+    const isUser = msg.role === 'user';
+    if (msg.role === 'system') return '';
 
-// ─── Send Message ───────────────────────────────────────
+    const allBlocks = isStreaming ? (sBlocks || []) : (msg.blocks || []);
+    const textContent = isStreaming && sText !== undefined ? sText : msg.content;
+    const avatarClass = isUser ? 'user' : 'ai';
+    const avatarText = isUser ? 'U' : 'AI';
+
+    let contentHtml = '';
+    if (isUser) {
+        let filesHtml = '';
+        if (msg.files && msg.files.length > 0) {
+            filesHtml = '<div class="mb-2 flex flex-wrap gap-1.5">' + msg.files.map(f => '<span class="inline-flex items-center gap-1 rounded-md bg-white/20 px-2 py-0.5 text-xs">📄 ' + escapeHtml(f.name) + '</span>').join('') + '</div>';
+        }
+        contentHtml = '<div class="user-bubble">' + filesHtml + '<div>' + escapeHtml(textContent || '') + '</div></div>';
+    } else {
+        let inner = '';
+        if (allBlocks.length > 0) {
+            inner = allBlocks.map(b => renderStructuredBlock(b)).join('');
+        } else {
+            inner = renderMarkdown(textContent || '');
+        }
+        if (isStreaming) inner += '<span class="streaming-cursor"></span>';
+        contentHtml = '<div class="ai-bubble">' + inner + '</div>';
+    }
+
+    return '<div class="msg-row ' + (isUser ? 'user' : 'assistant') + '"><div class="msg-wrapper"><div class="avatar ' + avatarClass + '">' + avatarText + '</div><div class="msg-content">' + contentHtml + '</div></div></div>';
+}
+
+// Message ───────────────────────────────────────
 async function handleSend(rawText, structured) {
     if (!rawText.trim() && uploadedFiles.length === 0) return;
     if (status === 'loading' || status === 'streaming') return;
@@ -350,11 +384,11 @@ function renderMessages() {
     msgContainer.style.display = isEmpty ? 'none' : 'flex';
     actionBtns.style.display = messages.length > 0 ? 'flex' : 'none';
 
-    const inputRow = document.getElementById('input-row-container');
+    const inputArea = document.getElementById('input-area');
     const streamingControls = document.getElementById('streaming-controls');
     const retryStatus = document.getElementById('retry-status');
 
-    if (inputRow) inputRow.style.display = isStreaming ? 'none' : 'block';
+    if (inputArea) inputArea.style.display = isStreaming ? 'none' : 'block';
     if (streamingControls) streamingControls.style.display = isStreaming && status !== 'retrying' ? 'flex' : 'none';
     if (retryStatus) retryStatus.style.display = status === 'retrying' ? 'flex' : 'none';
 

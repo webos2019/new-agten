@@ -304,6 +304,7 @@ const AIInputEditor = forwardRef<AIInputEditorRef, Props>(({ placeholder, slashC
                 selectedIdxRef.current = 0
                 filteredRef.current = slashCommands.filter(cmd =>
                     cmd.label.toLowerCase().includes(m.query.toLowerCase()) ||
+                    (cmd.desc && cmd.desc.toLowerCase().includes(m.query.toLowerCase())) ||
                     (cmd.alias && cmd.alias.some(a => a.toLowerCase().includes(m.query.toLowerCase())))
                 )
                 if (slashMenuRef.current) renderMenu(slashMenuRef.current, filteredRef.current, 'slash', m.query)
@@ -316,6 +317,7 @@ const AIInputEditor = forwardRef<AIInputEditorRef, Props>(({ placeholder, slashC
                 selectedIdxRef.current = 0
                 filteredRef.current = slashCommands.filter(cmd =>
                     cmd.label.toLowerCase().includes(m.query.toLowerCase()) ||
+                    (cmd.desc && cmd.desc.toLowerCase().includes(m.query.toLowerCase())) ||
                     (cmd.alias && cmd.alias.some(a => a.toLowerCase().includes(m.query.toLowerCase())))
                 )
                 if (slashMenuRef.current) renderMenu(slashMenuRef.current, filteredRef.current, 'slash', m.query)

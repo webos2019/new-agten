@@ -23,8 +23,14 @@ from validators import validate_message_text, validate_file
 
 app = FastAPI(title="Code Assistant", version="0.1.0")
 
-# 静态文件
+# 静态文件 - React 构建产物优先，旧版静态文件作为回退
+dist_dir = os.path.join(os.path.dirname(__file__), "static", "dist")
 static_dir = os.path.join(os.path.dirname(__file__), "static")
+
+# React 构建产物 (npm run build 后生成)
+if os.path.isdir(dist_dir):
+    app.mount("/assets", StaticFiles(directory=os.path.join(dist_dir, "assets")), name="react-assets")
+# 旧版静态文件 (开发模式回退)
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -47,11 +53,24 @@ def get_client_ip(request: Request) -> str:
 
 @app.get("/")
 async def index():
-    """主页"""
+    """主页 - 优先返回 React 构建产物，回退到旧版"""
+    # React 构建产物
+    dist_index = os.path.join(dist_dir, "index.html")
+    if os.path.isfile(dist_index):
+        return FileResponse(dist_index)
+    # 旧版静态文件
     index_path = os.path.join(static_dir, "index.html")
     if os.path.isfile(index_path):
         return FileResponse(index_path)
     return JSONResponse({"error": "index.html not found"}, status_code=404)
+
+@app.get("/assets/{filepath:path}")
+async def react_assets(filepath: str):
+    """React 构建资源"""
+    file_path = os.path.join(dist_dir, "assets", filepath)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return JSONResponse({"error": "not found"}, status_code=404)
 
 
 class ChatRequest(BaseModel):

@@ -417,34 +417,6 @@ function renderMessages() {
 
     msgContainer.innerHTML = html;
     scrollToBottom();
-(msg, isStreaming, sText, sBlocks) {
-    const isUser = msg.role === 'user';
-    if (msg.role === 'system') return '';
-
-    const allBlocks = isStreaming ? (sBlocks || []) : (msg.blocks || []);
-    const textContent = isStreaming && sText !== undefined ? sText : msg.content;
-    const avatarClass = isUser ? 'user' : 'ai';
-    const avatarText = isUser ? 'U' : 'AI';
-
-    let contentHtml = '';
-    if (isUser) {
-        let filesHtml = '';
-        if (msg.files && msg.files.length > 0) {
-            filesHtml = '<div class="mb-2 flex flex-wrap gap-1.5">' + msg.files.map(f => '<span class="inline-flex items-center gap-1 rounded-md bg-white/20 px-2 py-0.5 text-xs">📄 ' + escapeHtml(f.name) + '</span>').join('') + '</div>';
-        }
-        contentHtml = '<div class="user-bubble">' + filesHtml + '<div>' + escapeHtml(textContent || '') + '</div></div>';
-    } else {
-        let inner = '';
-        if (allBlocks.length > 0) {
-            inner = allBlocks.map(b => renderStructuredBlock(b)).join('');
-        } else {
-            inner = renderMarkdown(textContent || '');
-        }
-        if (isStreaming) inner += '<span class="streaming-cursor"></span>';
-        contentHtml = '<div class="ai-bubble">' + inner + '</div>';
-    }
-
-    return '<div class="msg-row ' + (isUser ? 'user' : 'assistant') + '"><div class="msg-wrapper"><div class="avatar ' + avatarClass + '">' + avatarText + '</div><div class="msg-content">' + contentHtml + '</div></div></div>';
 }
 
 // ─── Structured Block Render ────────────────────────────
@@ -454,7 +426,7 @@ function renderStructuredBlock(block) {
             return '<div class="my-2 overflow-hidden rounded-xl border border-amber-200 bg-amber-50/80"><details class="group" open><summary class="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs font-medium text-amber-700">⚡ 推理过程 <span class="ml-auto text-amber-500">点击展开/收起</span></summary><div class="border-t border-amber-200/50 px-3 py-2 text-xs leading-relaxed text-amber-800">' + renderMarkdown(block.content) + '</div></details></div>';
         case 'tool_call': {
             const argsStr = block.toolArgs ? Object.entries(block.toolArgs).map(([k, v]) => k + '=' + v).join(', ') : '';
-            return '<div class="tool-call-block"><div class="tool-call-header"><span class="tool-call-name">🔧(block.toolName || '') + '</span><span class="tool-result-badge success">执行中</span></div>' + (argsStr ? '<div class="tool-call-args"><div class="tool-call-args-label">输入</div><div class="tool-call-args-value">' + escapeHtml(argsStr) + '</div></div>' : '') + '</div>';
+            return '<div class="tool-call-block"><div class="tool-call-header"><span class="tool-call-name">🔧 ' + escapeHtml(block.toolName || '') + '</span><span class="tool-result-badge success">执行中</span></div>' + (argsStr ? '<div class="tool-call-args"><div class="tool-call-args-label">输入</div><div class="tool-call-args-value">' + escapeHtml(argsStr) + '</div></div>' : '') + '</div>';
         }
         case 'tool_result': {
             let displayResult = block.toolResult || '';

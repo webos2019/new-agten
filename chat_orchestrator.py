@@ -1,4 +1,4 @@
-"""聊天编排器 - 核心对话流程"""
+"""聊天编排器 - 核心对话流程 (增强 Tool Runtime 能力驱动)"""
 
 import json
 import asyncio
@@ -7,6 +7,7 @@ from typing import Any
 from chat_session import ChatSession
 from tool_registry import tool_registry
 from skill_registry import skill_registry
+from tool_runtime import tool_runtime
 from stream import (
     StreamLifecycle,
     StreamWriter,

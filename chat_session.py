@@ -1,9 +1,10 @@
-"""聊天会话管理"""
+"""聊天会话管理 (支持 Tool Runtime 增强)"""
 
 from typing import Any
 
 from skill_registry import skill_registry
 from tool_registry import tool_registry
+from tool_runtime import tool_runtime
 from deepseek import chat_completion, get_model
 
 
@@ -17,7 +18,7 @@ class ChatSession:
 
         self._skill_id = skill_id
         self._skill = skill
-        self._messages = self._to_openai_messages(messages)
+        self._messages = self._to_openai_messages(messages, skill_id)
 
     def get_messages(self) -> list[dict[str, Any]]:
         return self._messages
@@ -42,16 +43,17 @@ class ChatSession:
 
         # 构建完整消息列表（包含 system prompt）
         full_messages = [{"role": "system", "content": self.get_system_prompt()}]
-        full_messages.extend(msg_list)
+        full_messages.extend(self._to_openai_messages(msg_list, self._skill_id))
 
         return await chat_completion(
             messages=full_messages,
             tools=tool_list if tool_list else None,
         )
 
-    @staticmethod
     def _to_openai_messages(
+        self,
         messages: list[dict[str, Any]],
+        skill_id: str,
     ) -> list[dict[str, Any]]:
         """将前端消息格式转换为 OpenAI 消息格式"""
         result = []
@@ -59,19 +61,23 @@ class ChatSession:
             role = msg.get("role", "user")
             content = msg.get("content", "")
 
-            # 处理用户上传的文件
-            if role == "user" and msg.get("files"):
-                file_parts = []
-                for f in msg["files"]:
-                    file_parts.append(
-                        f"```\n文件: {f.get('name', '')}\n```\n"
-                        f"```{f.get('type', 'text')}\n{f.get('content', '')}\n```"
-                    )
-                file_context = "\n\n".join(file_parts)
-                if content:
-                    content = f"{content}\n\n---\n以下是用户上传的代码文件：\n\n{file_context}"
-                else:
-                    content = f"用户上传了以下代码文件：\n\n{file_context}"
+            # 处理用户上传的文件和结构化请求 (Tool Runtime 增强)
+            if role == "user":
+                structured = msg.get("structured")
+                if structured:
+                    content = tool_runtime.enhance_context(content, skill_id, structured)
+                if msg.get("files"):
+                    file_parts = []
+                    for f in msg["files"]:
+                        file_parts.append(
+                            f"```\n文件: {f.get('name', '')}\n```\n"
+                            f"```{f.get('type', 'text')}\n{f.get('content', '')}\n```"
+                        )
+                    file_context = "\n\n".join(file_parts)
+                    if content:
+                        content = f"{content}\n\n---\n以下是用户上传的代码文件：\n\n{file_context}"
+                    else:
+                        content = f"用户上传了以下代码文件：\n\n{file_context}"
 
             if role == "system":
                 result.append({"role": "system", "content": content})

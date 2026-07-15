@@ -357,3 +357,90 @@ body {
     font-size: 0.875rem; line-height: 1.6; margin: 0;
 }
 .code-block-pre code { font-family: "Fira Code", "Cascadia Code", "Consolas", monospace; color: #e5e7eb; }
+
+/* ─── AI Input Editor (Tiptap-style) ─────────────────── */
+.ai-editor-container {
+    position: relative; display: flex; flex-direction: column;
+    border-radius: 0.75rem; border: 1px solid #d1d5db;
+    background-color: #fff; padding: 0.75rem 1rem;
+    transition: border-color 150ms; min-height: 60px;
+}
+.ai-editor-container:focus-within { border-color: #3b82f6; }
+.ai-editor-container.dragover { border-color: #3b82f6; background-color: #eff6ff; }
+
+.ai-editor-placeholder {
+    position: absolute; top: 0.75rem; left: 1rem; right: 1rem;
+    color: #9ca3af; font-size: 0.875rem; pointer-events: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.ai-editor-content {
+    flex: 1; outline: none; font-size: 0.875rem; color: #111827;
+    line-height: 1.6; min-height: 24px; max-height: 200px; overflow-y: auto;
+    word-break: break-word; white-space: pre-wrap;
+}
+
+/* Inline Chip */
+.ai-inline-chip {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    padding: 0.125rem 0.375rem; margin: 0 0.125rem;
+    border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500;
+    background-color: #eff6ff; color: #1d4ed8;
+    border: 1px solid #bfdbfe; cursor: default;
+    user-select: none; vertical-align: middle;
+}
+.ai-chip-icon { font-size: 0.625rem; }
+.ai-chip-label { line-height: 1.2; }
+.ai-chip-remove {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1rem; height: 1rem; margin-left: 0.125rem;
+    border-radius: 9999px; cursor: pointer; font-size: 0.75rem;
+    color: #6b7280; background: none; border: none; padding: 0;
+    line-height: 1; transition: background-color 150ms;
+}
+.ai-chip-remove:hover { background-color: #dbeafe; color: #dc2626; }
+
+/* Slash Menu & @ Menu */
+.ai-slash-menu, .ai-at-menu {
+    position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
+    margin-top: 0.25rem; border-radius: 0.5rem;
+    background-color: #fff; border: 1px solid #e5e7eb;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+    max-height: 12rem; overflow-y: auto;
+}
+.ai-menu-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.875rem;
+    transition: background-color 100ms;
+}
+.ai-menu-item:hover, .ai-menu-item.selected { background-color: #f3f4f6; }
+.ai-menu-icon { flex-shrink: 0; width: 1.25rem; text-align: center; }
+.ai-menu-label { flex: 1 1 0%; color: #374151; }
+.ai-menu-label strong { color: #2563eb; font-weight: 600; }
+.ai-menu-desc { font-size: 0.75rem; color: #9ca3af; white-space: nowrap; }
+
+/* Inline Code Block (in editor) */
+.ai-inline-codeblock {
+    margin: 0.5rem 0; border-radius: 0.5rem; overflow: hidden;
+    border: 1px solid #374151; background-color: #1e1e2e;
+}
+.ai-code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.25rem 0.75rem; background-color: #1f2937;
+    border-bottom: 1px solid #374151;
+}
+.ai-code-lang { font-size: 0.75rem; color: #9ca3af; }
+.ai-code-copy {
+    background: none; border: none; color: #9ca3af; cursor: pointer;
+    font-size: 0.75rem; padding: 0.125rem 0.375rem; border-radius: 0.25rem;
+}
+.ai-code-copy:hover { background-color: #374151; color: #fff; }
+
+/* Editor input row */
+.ai-editor-input-row {
+    display: flex; align-items: flex-end; gap: 0.5rem;
+    border-radius: 0.75rem; border: 1px solid #d1d5db;
+    background-color: #f9fafb; padding: 0.5rem;
+    transition: border-color 150ms;
+}
+.ai-editor-input-row:focus-within { border-color: #3b82f6; }

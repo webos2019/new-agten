@@ -191,34 +191,40 @@ def extract_plan_structure(content: str) -> dict[str, Any]:
     if title_match:
         result["version"] = f"v{title_match.group(1)}"
 
-    # 按段落提取
+    # 按段落提取 — 先长后短匹配，避免 "目标" 匹配到 "非目标"
     current_section = None
-    section_map = {
-        "目标": "goals",
-        "非目标": "non_goals",
-        "关键变更": "key_changes",
-        "测试计划": "test_plan",
-        "交付结果": "deliverables",
-    }
+    # 按长度降序排列，确保 "非目标" 优先于 "目标" 匹配
+    section_map = sorted([
+        ("非目标", "non_goals"),
+        ("目标", "goals"),
+        ("关键变更", "key_changes"),
+        ("测试计划", "test_plan"),
+        ("交付结果", "deliverables"),
+    ], key=lambda x: len(x[0]), reverse=True)
 
     for line in lines:
         stripped = line.strip()
 
-        # 检测段落标题
-        for cn_name, key in section_map.items():
-            if cn_name in stripped and stripped.startswith("#"):
-                current_section = key
-                break
-        else:
-            # 列表项
-            if current_section and re.match(r"^\s*([-*]|\d+\.)\s", stripped):
-                item_text = re.sub(r"^\s*([-*]|\d+\.)\s+", "", stripped).strip()
-                if item_text:
-                    result[current_section].append(item_text)
-            # 空行重置段落
-            elif not stripped and current_section:
-                # 允许段落间空行，不立即重置
-                pass
+        # 检测段落标题 — 精确匹配 ## 后的文本
+        if stripped.startswith("#"):
+            header_text = stripped.lstrip("#").strip()
+            matched = False
+            for cn_name, key in section_map:
+                # 用包含 + 长度比较来避免子串误匹配
+                if cn_name in header_text and len(cn_name) >= len(header_text) - 2:
+                    current_section = key
+                    matched = True
+                    break
+            if not matched:
+                # 遇到其他标题时，重置 section
+                current_section = None
+            continue
+
+        # 列表项
+        if current_section and re.match(r"^\s*([-*]|\d+\.)\s", stripped):
+            item_text = re.sub(r"^\s*([-*]|\d+\.)\s+", "", stripped).strip()
+            if item_text:
+                result[current_section].append(item_text)
 
     return result
 

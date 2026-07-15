@@ -25,6 +25,7 @@ from agent_runtime import (
     run_tasklist_agent,
     resolve_version_plan_uri,
     VERSION_PLAN_URI_PATTERN,
+    VERSION_PLAN_URI_SEARCH_PATTERN,
 )
 
 MAX_TOOL_CALLS = 5
@@ -92,11 +93,11 @@ async def _try_agent_entry(
                     version_plan_uri = data["uri"]
                     break
 
-    # 也检查 rawText 中是否有 docs://versions/ 引用
+    # 也检查 rawText 中是否有 docs://versions/ 引用（支持嵌入文本中的 URI）
     if not version_plan_uri:
-        uri_match = VERSION_PLAN_URI_PATTERN.search(raw_text)
+        uri_match = VERSION_PLAN_URI_SEARCH_PATTERN.search(raw_text)
         if uri_match:
-            version_plan_uri = uri_match.group(0)
+            version_plan_uri = f"docs://versions/{uri_match.group(1)}"
 
     if not version_plan_uri:
         # 命中 /tasklist 但缺少版本方案引用 → 明确提示

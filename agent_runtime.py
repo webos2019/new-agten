@@ -37,6 +37,8 @@ from deepseek import chat_completion
 # ─── 资源路径 ─────────────────────────────────────────
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs", "versions")
 VERSION_PLAN_URI_PATTERN = re.compile(r"^docs://versions/([^/\\]+\.md)$", re.IGNORECASE)
+# 用于在文本中搜索 URI 的模式（无锚点，匹配嵌入文本中的 URI）
+VERSION_PLAN_URI_SEARCH_PATTERN = re.compile(r"docs://versions/([^/\\]+\.md)", re.IGNORECASE)
 
 
 def resolve_version_plan_uri(uri: str) -> tuple[str | None, str | None]:

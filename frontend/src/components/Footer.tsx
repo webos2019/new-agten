@@ -67,7 +67,7 @@ const Footer: React.FC<Props> = ({ isStreaming, isRetrying, slashCommands, atRef
         <div className="footer-container">
             <div className="input-area">
                 {/* File Upload */}
-                <div className="mb-2">
+                <div className="file-upload-wrapper">
                     <div className="file-upload-area" onClick={() => fileInputRef.current?.click()}>
                         <input
                             ref={fileInputRef}
@@ -77,20 +77,18 @@ const Footer: React.FC<Props> = ({ isStreaming, isRetrying, slashCommands, atRef
                             onChange={(e) => { if (e.target.files) onFileSelect(e.target.files); e.target.value = '' }}
                             accept=".py,.js,.ts,.jsx,.tsx,.go,.rs,.java,.md,.json,.yaml,.yml,.css,.scss,.sql,.sh,.bash,.html,.vue,.svelte,.c,.cpp,.h,.hpp,.rb,.php,.swift,.kt,.dart,.toml,.xml,.txt"
                         />
-                        <div className="text-center text-sm text-gray-500">
-                            <svg className="mx-auto mb-1 h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                            <span>拖拽代码文件到此处，或点击选择文件</span>
-                        </div>
+                        <svg className="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        <span className="file-upload-text">拖拽代码文件到此处，或点击选择</span>
                     </div>
                     {uploadedFiles.length > 0 && (
                         <div className="file-list">
                             {uploadedFiles.map((f, i) => (
                                 <div key={i} className="file-item">
-                                    <svg className="h-4 w-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    <svg className="file-item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                     <span className="file-item-name">{f.name}</span>
-                                    <span className="text-xs text-gray-400 flex-shrink-0">{formatSize(f.size)}</span>
+                                    <span className="file-item-size">{formatSize(f.size)}</span>
                                     <button className="file-item-remove" onClick={() => onFileRemove(i)}>
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        <svg className="file-item-x" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                     </button>
                                 </div>
                             ))}
@@ -106,7 +104,7 @@ const Footer: React.FC<Props> = ({ isStreaming, isRetrying, slashCommands, atRef
                     onSend={onSend}
                     onFileDrop={onFileDrop}
                 />
-                <p className="text-center text-xs text-gray-400 mt-1.5">支持 / 斜杠命令、@ 引用工具、Ctrl+Enter 发送</p>
+                <p className="input-hint">支持 / 斜杠命令、@ 引用工具、Ctrl+Enter 发送</p>
             </div>
         </div>
     )

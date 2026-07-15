@@ -15,6 +15,11 @@ let streamingBlocks = [];
 let streamingText = '';
 let editor = null;
 
+// History records (persisted in localStorage)
+let inputHistory = [];
+const HISTORY_KEY = 'ai_input_history';
+const HISTORY_MAX = 50;
+
 const MAX_CONTEXT_ROUNDS = 8;
 
 // ─── Slash Commands Definition ──────────────────────────
@@ -65,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initFeatures();
     initFileUpload();
     getPublicIP();
+    loadHistory();
+    renderHistoryList();
 });
 
 function initEditor() {
@@ -236,6 +243,9 @@ async function handleSend(rawText, structured) {
     setStatus('loading');
     streamingBlocks = [];
     streamingText = '';
+
+    // 保存到输入历史记录
+    addToHistory(rawText);
 
     // Build structured request payload
     const requestPayload = {
@@ -550,4 +560,68 @@ function retryLastMessage() {
         error = null;
         handleSend(lastMsg.content, null);
     }
+}
+
+// ─── Input History ────────────────────────────────────
+function loadHistory() {
+    try {
+        const saved = localStorage.getItem(HISTORY_KEY);
+        inputHistory = saved ? JSON.parse(saved) : [];
+    } catch (e) { inputHistory = []; }
+}
+
+function saveHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(inputHistory)); } catch (e) {}
+}
+
+function addToHistory(text) {
+    if (!text || !text.trim()) return;
+    // 去重：相同文本移除旧记录后重新置顶
+    inputHistory = inputHistory.filter(h => h.text !== text);
+    inputHistory.unshift({
+        text: text,
+        time: new Date().toLocaleString('zh-CN', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        })
+    });
+    if (inputHistory.length > HISTORY_MAX) inputHistory = inputHistory.slice(0, HISTORY_MAX);
+    saveHistory();
+    renderHistoryList();
+}
+
+function renderHistoryList() {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+    if (inputHistory.length === 0) {
+        list.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+        return;
+    }
+    list.innerHTML = inputHistory.map((h, i) =>
+        '<div class="history-item" onclick="loadHistoryItem(' + i + ')" title="点击载入到输入框">' +
+        '<button class="history-item-delete" onclick="event.stopPropagation(); deleteHistoryItem(' + i + ')" title="删除">' +
+        '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' +
+        '</button>' +
+        '<div class="history-item-text">' + escapeHtml(h.text) + '</div>' +
+        '<div class="history-item-time">' + escapeHtml(h.time) + '</div>' +
+        '</div>'
+    ).join('');
+}
+
+function loadHistoryItem(index) {
+    const item = inputHistory[index];
+    if (!item || !editor) return;
+    editor.setValue(item.text);
+    if (editor.editor) editor.editor.focus();
+}
+
+function deleteHistoryItem(index) {
+    inputHistory.splice(index, 1);
+    saveHistory();
+    renderHistoryList();
+}
+
+function clearHistory() {
+    inputHistory = [];
+    saveHistory();
+    renderHistoryList();
 }

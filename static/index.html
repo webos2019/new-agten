@@ -44,6 +44,8 @@
             </div>
         </header>
 
+        <!-- Body Wrapper: Chat + History Sidebar -->
+        <div class="body-wrapper">
         <!-- Chat Body -->
         <div id="chat-body" class="chat-body">
             <div class="chat-content">
@@ -64,6 +66,18 @@
                 <!-- Messages Container -->
                 <div id="messages-container" class="messages-container" style="display:none;"></div>
             </div>
+        </div>
+
+            <!-- History Sidebar -->
+            <aside id="history-sidebar" class="history-sidebar">
+                <div class="history-sidebar-header">
+                    <h3 class="history-sidebar-title">历史记录</h3>
+                    <button class="history-clear-btn" onclick="clearHistory()" title="清空历史记录">清空</button>
+                </div>
+                <div id="history-list" class="history-list">
+                    <div class="history-empty">暂无历史记录</div>
+                </div>
+            </aside>
         </div>
 
         <!-- Footer -->

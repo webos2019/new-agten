@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import ChatBody from './components/ChatBody'
 import Footer from './components/Footer'
+import HistorySidebar from './components/HistorySidebar'
 import { useChat } from './hooks/useChat'
+import { useInputHistory } from './hooks/useInputHistory'
 import { slashCommands, atReferences } from './types'
 import type { UploadedFile, StructuredRequest, AtReference } from './types'
 
@@ -14,6 +16,7 @@ export default function App() {
     const editorRef = useRef<{ clear: () => void; setValue: (text: string) => void }>(null)
 
     const chat = useChat()
+    const inputHistory = useInputHistory()
 
     // Fetch public IP on mount
     useEffect(() => {
@@ -38,9 +41,10 @@ export default function App() {
     }, [chat.clearMessages])
 
     const handleSend = useCallback((rawText: string, structured: StructuredRequest) => {
+        inputHistory.addToHistory(rawText)
         chat.sendMessage(rawText, structured, mode, clientIP, uploadedFiles)
         setUploadedFiles([])
-    }, [chat, mode, clientIP, uploadedFiles])
+    }, [chat, mode, clientIP, uploadedFiles, inputHistory])
 
     const handleFileDrop = useCallback((files: FileList) => {
         for (let i = 0; i < files.length; i++) {
@@ -93,14 +97,25 @@ export default function App() {
                 onRegenerate={handleRegenerate}
                 onClear={chat.clearMessages}
             />
-            <ChatBody
-                messages={chat.messages}
-                isStreaming={chat.isStreaming}
-                streamingText={chat.streamingText}
-                streamingBlocks={chat.streamingBlocks}
-                error={chat.error}
-                mode={mode}
-            />
+            <div className="body-wrapper">
+                <ChatBody
+                    messages={chat.messages}
+                    isStreaming={chat.isStreaming}
+                    streamingText={chat.streamingText}
+                    streamingBlocks={chat.streamingBlocks}
+                    error={chat.error}
+                    mode={mode}
+                />
+                <HistorySidebar
+                    history={inputHistory.history}
+                    onLoad={(index) => {
+                        const item = inputHistory.history[index]
+                        if (item) (window as any).__editorSetValue?.(item.text)
+                    }}
+                    onDelete={inputHistory.deleteHistoryItem}
+                    onClear={inputHistory.clearHistory}
+                />
+            </div>
             <Footer
                 isStreaming={chat.isStreaming}
                 isRetrying={isRetrying}

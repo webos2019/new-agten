@@ -25,7 +25,6 @@ export function useInputHistory() {
     const addToHistory = useCallback((text: string) => {
         if (!text || !text.trim()) return
         setHistory(prev => {
-            // 去重：相同文本移除旧记录后重新置顶
             const filtered = prev.filter(h => h.text !== text)
             const item: HistoryItem = {
                 text,

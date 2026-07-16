@@ -89,7 +89,7 @@ export default function App() {
     const isRetrying = chat.status === 'retrying'
 
     return (
-        <div className="container">
+        <div className="container flex h-screen flex-col overflow-hidden">
             <Header
                 mode={mode}
                 onSetMode={setMode}
@@ -97,25 +97,23 @@ export default function App() {
                 onRegenerate={handleRegenerate}
                 onClear={chat.clearMessages}
             />
-            <div className="body-wrapper">
-                <ChatBody
-                    messages={chat.messages}
-                    isStreaming={chat.isStreaming}
-                    streamingText={chat.streamingText}
-                    streamingBlocks={chat.streamingBlocks}
-                    error={chat.error}
-                    mode={mode}
-                />
-                <HistorySidebar
-                    history={inputHistory.history}
-                    onLoad={(index) => {
-                        const item = inputHistory.history[index]
-                        if (item) (window as any).__editorSetValue?.(item.text)
-                    }}
-                    onDelete={inputHistory.deleteHistoryItem}
-                    onClear={inputHistory.clearHistory}
-                />
-            </div>
+            <ChatBody
+                messages={chat.messages}
+                isStreaming={chat.isStreaming}
+                streamingText={chat.streamingText}
+                streamingBlocks={chat.streamingBlocks}
+                error={chat.error}
+                mode={mode}
+            />
+            <HistorySidebar
+                history={inputHistory.history}
+                onLoad={(index) => {
+                    const item = inputHistory.history[index]
+                    if (item) (window as any).__editorSetValue?.(item.text)
+                }}
+                onDelete={inputHistory.deleteHistoryItem}
+                onClear={inputHistory.clearHistory}
+            />
             <Footer
                 isStreaming={chat.isStreaming}
                 isRetrying={isRetrying}

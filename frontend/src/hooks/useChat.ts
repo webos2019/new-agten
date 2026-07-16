@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import type { ChatMessage, ChatBlock, ChatStatus, StructuredRequest, UploadedFile } from '../types'
+import { useStreamTextBuffer } from './useStreamTextBuffer'
 
 const MAX_CONTEXT_ROUNDS = 8
 
@@ -13,16 +14,48 @@ export function useChat() {
 
     const isStreaming = status === 'loading' || status === 'streaming'
 
+    // ─── 文本增量缓冲: 合并高频 text/reasoning delta ─────
+    const handleFlush = useCallback((partType: 'text' | 'reasoning', accumulated: string) => {
+        if (partType === 'text') {
+            setStreamingText(prev => prev + accumulated)
+            setStreamingBlocks(prev => {
+                const next = [...prev]
+                const last = next[next.length - 1]
+                if (last && last.type === 'text') last.content = (last.content || '') + accumulated
+                else next.push({ type: 'text', content: accumulated })
+                return next
+            })
+        } else {
+            setStreamingBlocks(prev => {
+                const next = [...prev]
+                const last = next[next.length - 1]
+                if (last && last.type === 'reasoning') last.content = (last.content || '') + accumulated
+                else next.push({ type: 'reasoning', content: accumulated })
+                return next
+            })
+        }
+    }, [])
+
+    const { enqueue, flush, flushAndClear, reset } = useStreamTextBuffer(handleFlush)
+
+    // ─── addChunk: text/reasoning 走缓冲，结构性 chunk 先 flush ──
     const addChunk = useCallback((chunk: any) => {
+        // 高频 delta 走缓冲
+        if (chunk.type === 'text') {
+            enqueue('text', chunk.content || '')
+            return
+        }
+        if (chunk.type === 'reasoning') {
+            enqueue('reasoning', chunk.content || '')
+            return
+        }
+
+        // 结构性 chunk 前先 flush 文本 buffer，保证顺序
+        flush()
+
         setStreamingBlocks(prev => {
             const next = [...prev]
             switch (chunk.type) {
-                case 'reasoning': {
-                    const last = next[next.length - 1]
-                    if (last && last.type === 'reasoning') last.content = (last.content || '') + (chunk.content || '')
-                    else next.push({ type: 'reasoning', content: chunk.content || '' })
-                    break
-                }
                 case 'tool_call':
                     next.push({ type: 'tool_call', toolName: chunk.toolName || '', toolArgs: chunk.toolArgs || {}, serverId: chunk.serverId, content: '' })
                     break
@@ -38,13 +71,6 @@ export function useChat() {
                 case 'resource_error':
                     next.push({ type: 'resource_error', content: chunk.error || '', resourceName: chunk.resourceName, resourceUri: chunk.resourceUri, serverId: chunk.serverId })
                     break
-                case 'text': {
-                    const text = chunk.content || ''
-                    const last = next[next.length - 1]
-                    if (last && last.type === 'text') last.content = (last.content || '') + text
-                    else next.push({ type: 'text', content: text })
-                    break
-                }
                 case 'error':
                     next.push({ type: 'text', content: '⚠️ 错误：' + (chunk.error || '服务端错误') })
                     break
@@ -57,7 +83,6 @@ export function useChat() {
                 case 'agent_step_start': {
                     const lastStep = next[next.length - 1]
                     if (lastStep && lastStep.type === 'agent_step' && lastStep.runId === chunk.runId && lastStep.status === 'pending') {
-                        // Update existing pending step
                         lastStep.actionType = chunk.actionType
                         lastStep.title = chunk.title
                         lastStep.stepIndex = chunk.stepIndex
@@ -71,7 +96,6 @@ export function useChat() {
                     break
                 }
                 case 'agent_step_end': {
-                    // Find the matching pending step and update it
                     const matchingStep = [...next].reverse().find(
                         b => b.type === 'agent_step' && b.runId === chunk.runId && b.stepIndex === chunk.stepIndex
                     )
@@ -92,9 +116,8 @@ export function useChat() {
             return next
         })
 
-        if (chunk.type === 'text') setStreamingText(prev => prev + (chunk.content || ''))
         if (chunk.type === 'error') setStatus('retrying')
-    }, [])
+    }, [enqueue, flush])
 
     const trimMsgs = useCallback((msgs: ChatMessage[]): ChatMessage[] => {
         const indices = msgs.map((m, i) => m.role === 'assistant' ? i : -1).filter(i => i !== -1)
@@ -118,6 +141,7 @@ export function useChat() {
         setStatus('loading')
         setStreamingBlocks([])
         setStreamingText('')
+        reset() // 重置文本缓冲
 
         const userMessage: ChatMessage = {
             role: 'user',
@@ -179,7 +203,6 @@ export function useChat() {
                             isValid: chunk.isValid, resourceName: chunk.resourceName,
                             resourceUri: chunk.resourceUri, serverId: chunk.serverId,
                             isTruncated: chunk.isTruncated, previewChars: chunk.previewChars,
-                            // Agent step fields
                             actionType: chunk.actionType, title: chunk.title,
                             stepIndex: chunk.stepIndex, status: chunk.status,
                             summary: chunk.summary, durationMs: chunk.durationMs,
@@ -192,6 +215,9 @@ export function useChat() {
                 if (isDone) break
             }
 
+            // 流结束: flush 残留缓冲
+            flushAndClear()
+
             const assistantMessage: ChatMessage = {
                 role: 'assistant',
                 content: collectedText,
@@ -202,6 +228,8 @@ export function useChat() {
             setStreamingText('')
             setStatus('idle')
         } catch (err: any) {
+            // 中断时保留已收到的半截内容，只 flush 缓冲
+            flushAndClear()
             if (err.name === 'AbortError') { setStatus('idle'); return }
             setError(err.message || '未知错误')
             setStatus('error')
@@ -209,12 +237,13 @@ export function useChat() {
         } finally {
             abortRef.current = null
         }
-    }, [messages, status, addChunk, trimMsgs])
+    }, [messages, status, addChunk, trimMsgs, enqueue, flush, flushAndClear, reset])
 
     const cancelStream = useCallback(() => {
         if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+        flushAndClear() // flush 残留缓冲，保留已收到的半截内容
         setStatus('idle')
-    }, [])
+    }, [flushAndClear])
 
     const clearMessages = useCallback(() => {
         if (status === 'loading' || status === 'streaming') return
@@ -222,9 +251,10 @@ export function useChat() {
         setStreamingBlocks([])
         setStreamingText('')
         setError(null)
+        reset()
         setStatus('idle')
         if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
-    }, [status])
+    }, [status, reset])
 
     const regenerate = useCallback(() => {
         if (status === 'loading' || status === 'streaming') return
@@ -236,7 +266,6 @@ export function useChat() {
         const userMsg = messages[idx]
         const remaining = messages.slice(0, idx)
         setMessages(remaining)
-        // Return info for App to re-send
         return { text: userMsg.content, files: userMsg.files || [] }
     }, [messages, status])
 

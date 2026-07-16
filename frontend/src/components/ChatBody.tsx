@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import type { ChatMessage, ChatBlock } from '../types'
+import { useChatAutoScroll } from '../hooks/useChatAutoScroll'
 
 interface Props {
     messages: ChatMessage[]
@@ -67,7 +68,7 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
             const argsStr = block.toolArgs ? Object.entries(block.toolArgs).map(([k, v]) => k + '=' + v).join(', ') : ''
             return (
                 <div key={key} className="tool-call-block">
-                    <div className="tool-call-header">
+                    <div className="tool-call-header flex items-center justify-between">
                         <span className="tool-call-name">🔧 {escapeHtml(block.toolName || '')}</span>
                         <span className="tool-result-badge success">执行中</span>
                     </div>
@@ -98,7 +99,7 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
                 if (weatherData.humidity) rows.push(<div key="h" className="weather-row"><span className="weather-label">湿度</span><span className="weather-value">{weatherData.humidity}%</span></div>)
                 return (
                     <div key={key} className="tool-result-block">
-                        <div className="tool-result-header"><span className="tool-result-label">天气结果</span></div>
+                        <div className="tool-result-header flex items-center justify-between"><span className="tool-result-label">天气结果</span></div>
                         <div className="weather-result">{rows}</div>
                     </div>
                 )
@@ -107,7 +108,7 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
             const success = !isError && block.isValid !== false
             return (
                 <div key={key} className="tool-result-block" style={isError ? { borderColor: '#fecaca', background: 'rgba(254,242,242,0.5)' } : success ? { borderColor: '#bbf7d0', background: 'rgba(240,253,244,0.5)' } : {}}>
-                    <div className="tool-result-header">
+                    <div className="tool-result-header flex items-center justify-between">
                         <span className="tool-result-label" style={isError ? { color: '#ef4444' } : success ? { color: '#22c55e' } : {}}>结果</span>
                         <span className={`tool-result-badge ${isError ? 'error' : 'success'}`}>{isError ? '✗ 失败' : '✓ 成功'}</span>
                     </div>
@@ -120,7 +121,7 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
         case 'resource_start':
             return (
                 <div key={key} className="resource-block">
-                    <div className="resource-header">
+                    <div className="resource-header flex items-center justify-between">
                         <span className="resource-name">📖 {escapeHtml(block.resourceName || '')}</span>
                         <span className="tool-result-badge success">读取中</span>
                     </div>
@@ -156,7 +157,7 @@ function renderBlock(block: ChatBlock, key: number): React.ReactNode {
             const stepColor = block.status === 'success' ? 'var(--green-ok)' : block.status === 'error' ? 'var(--red-err)' : 'var(--cyan)'
             return (
                 <div key={key} className="agent-step-block">
-                    <div className="agent-step-header">
+                    <div className="agent-step-header flex items-center gap-2">
                         <span className="agent-step-icon" style={{ color: stepColor }}>{stepIcon}</span>
                         <span className="agent-step-title">{block.title || block.actionType || 'Agent 步骤'}</span>
                         {block.durationMs != null && (
@@ -227,10 +228,10 @@ function renderMessage(msg: ChatMessage, isStreaming: boolean, sText: string | u
     }
 
     return (
-        <div key={Math.random()} className={`msg-row ${isUser ? 'user' : 'assistant'}`}>
-            <div className="msg-wrapper">
+        <div key={Math.random()} className={`msg-row flex mb-6 ${isUser ? 'user justify-end' : 'assistant justify-start'}`}>
+            <div className="msg-wrapper flex w-full max-w-[90%] gap-3">
                 <div className={`avatar ${avatarClass}`}>{avatarText}</div>
-                <div className="msg-content">{content}</div>
+                <div className="msg-content min-w-0 flex-1">{content}</div>
             </div>
         </div>
     )
@@ -238,12 +239,12 @@ function renderMessage(msg: ChatMessage, isStreaming: boolean, sText: string | u
 
 // ─── ChatBody ─────────────────────────────────────────
 const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, streamingBlocks, error, mode }) => {
-    const chatBodyRef = useRef<HTMLDivElement>(null)
     const isEmpty = messages.length === 0 && !isStreaming
 
-    useEffect(() => {
-        if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight
-    }, [messages, streamingText, streamingBlocks])
+    const { scrollContainerRef, showScrollToBottom, bottomSpacing, scrollToBottom } = useChatAutoScroll({
+        isActive: isStreaming,
+        dependency: messages.length + streamingText.length + streamingBlocks.length,
+    })
 
     // Feature cards
     const utilityFeatures = [
@@ -262,35 +263,37 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
 
     if (isEmpty) {
         return (
-            <div className="chat-body" ref={chatBodyRef}>
-                <div className="chat-content">
-                    <div className="empty-state">
-                        <div className="empty-icon-container">
-                            <svg className="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex-1 overflow-y-auto min-w-0" ref={scrollContainerRef}>
+                <div className="mx-auto w-full max-w-2xl px-3 py-4 sm:px-4 sm:py-6">
+                    <div className="empty-state flex min-h-[40vh] flex-col items-center justify-center text-center py-4 sm:py-6">
+                        <div className="empty-icon-container mb-4 flex h-12 w-12 items-center justify-center rounded-xl sm:h-14 sm:w-14">
+                            <svg className="empty-icon h-6 w-6 sm:h-7 sm:w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2L2 7l10 5 10-5-10-5z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 17l10 5 10-5" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12l10 5 10-5" />
                             </svg>
                         </div>
-                        <h2 className="empty-title">{mode === 'utility-skill' ? '实用工具助手' : '文件与天气助手'}</h2>
-                        <p className="empty-desc">
+                        <h2 className="empty-title mb-2 text-xl font-bold sm:text-2xl">{mode === 'utility-skill' ? '实用工具助手' : '文件与天气助手'}</h2>
+                        <p className="empty-desc mb-4 max-w-[16rem] text-xs leading-relaxed sm:mb-6 sm:max-w-xs sm:text-sm">
                             {mode === 'utility-skill'
                                 ? '输入 / 查看命令菜单，@ 引用工具。支持数学计算、日期查询、单位换算等工具调用。'
                                 : '输入 / 引用工具，@ 引用上下文。支持读取本地文件、查询实时天气、获取地理位置。'}
                         </p>
-                        <div className="feature-grid">
+                        <div className="mx-auto grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
                             {features.map((f, i) => (
                                 <div key={i} className="feature-card">
-                                    <div className={`feature-icon-container ${mode === 'reader-skill' ? 'feature-icon-purple' : ''}`}>
-                                        <svg className="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`feature-icon-container flex h-6 w-6 shrink-0 items-center justify-center rounded ${mode === 'reader-skill' ? 'feature-icon-purple' : ''}`}>
+                                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                        </div>
+                                        <h3 className="feature-title">{f.title}</h3>
                                     </div>
-                                    <h3 className="feature-title">{f.title}</h3>
-                                    <p className="feature-desc">{f.desc}</p>
+                                    <p className="feature-desc mt-1">{f.desc}</p>
                                 </div>
                             ))}
                         </div>
-                        <div className="info-box">
-                            <svg className="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <div className="info-box mt-4 flex items-center gap-2 rounded-lg px-4 py-2 sm:mt-6 sm:px-5 sm:py-2.5">
+                            <svg className="info-icon h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             支持流式错误自动恢复，始终保障服务可用
                         </div>
                     </div>
@@ -305,9 +308,10 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
     }
 
     return (
-        <div className="chat-body" ref={chatBodyRef}>
-            <div className="chat-content">
-                <div className="messages-container">
+        <>
+        <div className="flex-1 overflow-y-auto min-w-0" ref={scrollContainerRef}>
+            <div className="mx-auto w-full max-w-2xl px-3 py-4 sm:px-4 sm:py-6" style={{ paddingBottom: `${bottomSpacing}px` }}>
+                <div className="flex flex-col gap-4 sm:gap-6">
                     {messages.map((msg, i) => {
                         const isLastAssistant = i === lastAssistantIndex && msg.role === 'assistant'
                         const showStreaming = isStreaming && isLastAssistant
@@ -316,10 +320,10 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
                     {isStreaming && lastAssistantIndex < 0 && renderMessage({ role: 'assistant', content: '' }, true, streamingText, streamingBlocks)}
                     {error && (
                         <div className="error-container">
-                            <div className="error-content">
-                                <svg className="error-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                <div className="error-text">
-                                    <p className="error-title">出错了</p>
+                            <div className="error-content flex items-start gap-3">
+                                <svg className="error-icon mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <div className="error-text flex-1">
+                                    <p className="error-title font-medium mb-1">出错了</p>
                                     <p className="error-msg">{error}</p>
                                 </div>
                             </div>
@@ -328,6 +332,13 @@ const ChatBody: React.FC<Props> = ({ messages, isStreaming, streamingText, strea
                 </div>
             </div>
         </div>
+        {showScrollToBottom && (
+            <button className="scroll-to-bottom-btn" onClick={scrollToBottom}>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '1rem', height: '1rem' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                <span>回到底部</span>
+            </button>
+        )}
+        </>
     )
 }
 

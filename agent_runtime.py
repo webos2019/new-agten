@@ -2,14 +2,19 @@
 Agent Runtime — 受控 Tasklist Agent
 
 实现文章中描述的受控 Agent 链路:
-  入口检测 -> read_resource -> planExtract -> draft v1 -> validate -> (revise v2 -> validate) -> final_answer
+  入口检测 -> read_resource -> planExtract -> 方案就绪度评估 ->
+  draft v1 -> validate -> warning 分流 -> (revise v2 -> validate) ->
+  修正效果评估 -> final_answer
 
 关键设计:
 - 入口必须显式: /tasklist + @docs://versions/*.md 二者缺一不可
 - 状态机: AgentState 保存草稿/校验/修正次数, 仅本轮内存
 - 确定性质量门: validate_tasklist_structure 用规则检查结构完整性
+- Warning 分流: 区分 blocking（阻断）和 warning（警告），仅 blocking 触发修正
+- 修正效果评估: 比较 v1/v2 校验结果，选择更好的草稿输出
+- 方案就绪度评估: plan_extract 后检查方案是否包含足够信息
 - 最多一次自动修正: 不会无限循环
-- 最终输出: 可复制草稿 + 校验结论 + 人工确认点
+- 最终输出: 可复制草稿 + 校验结论 + 修正效果 + 人工确认点
 """
 
 from __future__ import annotations
@@ -72,13 +77,17 @@ def list_available_version_plans() -> list[dict[str, str]]:
 class ValidationIssue:
     code: str
     message: str
+    severity: str = "blocking"  # "blocking"（阻断，需修正）或 "warning"（警告，可忽略）
 
 
 @dataclass
 class ValidationResult:
     is_valid: bool
+    should_revise: bool = False  # 是否值得触发模型修正（仅 blocking issues 为 True）
     issues: list[ValidationIssue] = field(default_factory=list)
     summary: str = ""
+    blocking_count: int = 0
+    warning_count: int = 0
 
 
 @dataclass
@@ -101,6 +110,7 @@ class AgentState:
     validation_v1: ValidationResult | None = None
     validation_v2: ValidationResult | None = None
     revision_count: int = 0  # 0 或 1
+    revision_effect: str = ""  # 修正效果评估结果
 
     # 最终
     final_answer: str = ""
@@ -113,57 +123,75 @@ def validate_tasklist_structure(draft: str, state: AgentState) -> ValidationResu
     """
     确定性结构校验 — 不依赖模型判断，用规则检查 tasklist 草稿结构完整性。
 
-    校验项:
-    - missing_title: 是否有标题
-    - missing_plan_uri: 是否标明来源版本方案
-    - missing_steps: 是否有主要步骤
-    - missing_checklist: 是否有勾选项
-    - missing_verification: 是否有验证内容
+    校验项（severity 分流）:
+    - missing_title [blocking]: 是否有标题
+    - missing_plan_uri [blocking]: 是否标明来源版本方案
+    - missing_steps [blocking/warning]: 0 步阻断，1-2 步警告
+    - missing_checklist [blocking/warning]: 0 项阻断，1 项警告
+    - missing_verification [warning]: 是否有验证内容
     """
     issues: list[ValidationIssue] = []
 
     if not draft or not draft.strip():
         return ValidationResult(
             is_valid=False,
-            issues=[ValidationIssue("empty_draft", "草稿为空")],
+            should_revise=True,
+            issues=[ValidationIssue("empty_draft", "草稿为空", severity="blocking")],
             summary="草稿为空",
+            blocking_count=1,
         )
 
     lines = draft.strip().split("\n")
 
-    # 1. 标题检查 — 首行应为 # 开头的 Markdown 标题
+    # 1. 标题检查 — 首行应为 # 开头的 Markdown 标题（阻断）
     has_title = any(line.strip().startswith("#") for line in lines[:5])
     if not has_title:
-        issues.append(ValidationIssue("missing_title", "缺少标题（# 开头）"))
+        issues.append(ValidationIssue("missing_title", "缺少标题（# 开头）", severity="blocking"))
 
-    # 2. 来源版本方案检查 — 文本中是否包含 docs://versions/
+    # 2. 来源版本方案检查 — 文本中是否包含 docs://versions/（阻断）
     has_plan_uri = bool(re.search(r"docs://versions/", draft))
     if not has_plan_uri:
-        issues.append(ValidationIssue("missing_plan_uri", "未标明来源版本方案 URI"))
+        issues.append(ValidationIssue("missing_plan_uri", "未标明来源版本方案 URI", severity="blocking"))
 
-    # 3. 主要步骤检查 — 是否有 - 或数字列表项 (至少3个)
+    # 3. 主要步骤检查 — 0 步阻断，1-2 步警告
     step_items = [line for line in lines if re.match(r"^\s*([-*]|\d+\.)\s", line)]
     if len(step_items) < 3:
-        issues.append(ValidationIssue("missing_steps", f"主要步骤不足（仅 {len(step_items)} 项，需至少 3 项）"))
+        sev = "blocking" if len(step_items) == 0 else "warning"
+        issues.append(ValidationIssue(
+            "missing_steps", f"主要步骤不足（仅 {len(step_items)} 项，需至少 3 项）", severity=sev,
+        ))
 
-    # 4. 勾选项检查 — 是否有 [ ] 或 [x] 标记
+    # 4. 勾选项检查 — 0 项阻断，1 项警告
     checklist_items = re.findall(r"\[[ x]\]", draft)
     if len(checklist_items) < 2:
-        issues.append(ValidationIssue("missing_checklist", f"勾选项不足（仅 {len(checklist_items)} 项，需至少 2 项）"))
+        sev = "blocking" if len(checklist_items) == 0 else "warning"
+        issues.append(ValidationIssue(
+            "missing_checklist", f"勾选项不足（仅 {len(checklist_items)} 项，需至少 2 项）", severity=sev,
+        ))
 
-    # 5. 验证内容检查 — 是否包含验收/验证/测试相关关键词
+    # 5. 验证内容检查 — 警告（内容质量，非结构阻断）
     verification_keywords = ["验收", "验证", "测试", "确认", "verify", "test", "acceptance"]
     has_verification = any(kw in draft.lower() for kw in verification_keywords)
     if not has_verification:
-        issues.append(ValidationIssue("missing_verification", "缺少验证/验收内容"))
+        issues.append(ValidationIssue("missing_verification", "缺少验证/验收内容", severity="warning"))
 
-    blocking = [i for i in issues if i.code.startswith("missing_") or i.code == "empty_draft"]
-    is_valid = len(blocking) == 0
+    # ── Warning 分流：区分阻断性问题和警告 ──
+    blocking_issues = [i for i in issues if i.severity == "blocking"]
+    warning_issues = [i for i in issues if i.severity == "warning"]
+    is_valid = len(blocking_issues) == 0
+    should_revise = len(blocking_issues) > 0  # 仅阻断性问题才触发模型修正
 
     summary_parts = [i.message for i in issues]
     summary = "结构完整" if is_valid else "；".join(summary_parts)
 
-    return ValidationResult(is_valid=is_valid, issues=issues, summary=summary)
+    return ValidationResult(
+        is_valid=is_valid,
+        should_revise=should_revise,
+        issues=issues,
+        summary=summary,
+        blocking_count=len(blocking_issues),
+        warning_count=len(warning_issues),
+    )
 
 
 # ─── planExtract: 版本方案结构提取 ────────────────────
@@ -258,7 +286,9 @@ async def run_tasklist_agent(
 ) -> None:
     """
     Agent 主流程:
-    read_resource -> planExtract -> draft v1 -> validate -> (revise v2 -> validate) -> final_answer
+    read_resource -> planExtract -> 方案就绪度评估 ->
+    draft v1 -> validate -> warning 分流 ->
+    (revise v2 -> validate) -> 修正效果评估 -> final_answer
     """
     step = 0
 
@@ -309,6 +339,39 @@ async def run_tasklist_agent(
                     duration_ms=int((time.time() - t0) * 1000))
     step += 1
 
+    # ── Step 2.5: 方案就绪度评估 ──
+    _emit_step_start(lifecycle, state.run_id, step, "plan_readiness", "方案就绪度评估")
+    t0 = time.time()
+
+    plan = state.plan_extract
+    has_goals = bool(plan.get("goals"))
+    has_key_changes = bool(plan.get("key_changes"))
+
+    if not has_goals and not has_key_changes:
+        _emit_step_end(lifecycle, state.run_id, step, "error",
+                        "方案就绪度不足：未提取到目标和关键变更",
+                        duration_ms=int((time.time() - t0) * 1000))
+        lifecycle.write_chunk(create_text_chunk(
+            "⚠️ 版本方案信息不足，未提取到「目标」和「关键变更」章节。\n\n"
+            "请确保方案包含以下章节：\n"
+            "- `## 目标` 或 `## 版本目标`\n"
+            "- `## 关键变更` 或 `## 关键改动`\n\n"
+            f"提取结果: version={plan.get('version', '无')}, "
+            f"goals={len(plan.get('goals', []))} 项, "
+            f"key_changes={len(plan.get('key_changes', []))} 项\n\n"
+            "无法基于不完整的方案生成高质量草稿，请补充方案内容后重试。"
+        ))
+        return
+
+    readiness_summary = (
+        f"就绪度通过: goals={len(plan.get('goals', []))} 项, "
+        f"key_changes={len(plan.get('key_changes', []))} 项"
+    )
+    _emit_step_end(lifecycle, state.run_id, step, "success",
+                    readiness_summary,
+                    duration_ms=int((time.time() - t0) * 1000))
+    step += 1
+
     # ── Step 3: draft_tasklist v1 ──
     _emit_step_start(lifecycle, state.run_id, step, "draft_tasklist", "生成任务清单草稿 v1")
     t0 = time.time()
@@ -324,25 +387,32 @@ async def run_tasklist_agent(
                     duration_ms=int((time.time() - t0) * 1000))
     step += 1
 
-    # ── Step 4: validate_tasklist v1 ──
-    _emit_step_start(lifecycle, state.run_id, step, "validate_tasklist", "结构校验 v1")
+    # ── Step 4: validate_tasklist v1（含 Warning 分流）──
+    _emit_step_start(lifecycle, state.run_id, step, "validate_tasklist", "结构校验 v1（Warning 分流）")
     t0 = time.time()
 
     state.validation_v1 = validate_tasklist_structure(state.tasklist_draft_v1, state)
 
+    # 输出分流结果
+    v1_summary = state.validation_v1.summary
+    if state.validation_v1.warning_count > 0 and not state.validation_v1.should_revise:
+        v1_summary += f"（{state.validation_v1.warning_count} 个 warning 已忽略，不触发修正）"
+
     _emit_step_end(lifecycle, state.run_id, step,
-                    "success" if state.validation_v1.is_valid else "error",
-                    state.validation_v1.summary,
+                    "success" if state.validation_v1.is_valid else ("error" if state.validation_v1.should_revise else "success"),
+                    v1_summary,
                     duration_ms=int((time.time() - t0) * 1000))
     step += 1
 
-    # ── Step 5: revise_tasklist (如果需要且未修正过) ──
-    if not state.validation_v1.is_valid and state.revision_count < 1:
+    # ── Step 5: revise_tasklist（仅阻断性问题才修正，warning 跳过）──
+    if state.validation_v1.should_revise and state.revision_count < 1:
         _emit_step_start(lifecycle, state.run_id, step, "revise_tasklist", "自动修正草稿")
         t0 = time.time()
 
         state.revision_count = 1
-        issues_text = "；".join(i.message for i in state.validation_v1.issues)
+        # 只把阻断性问题传给模型，warning 不需要修
+        blocking_issues = [i for i in state.validation_v1.issues if i.severity == "blocking"]
+        issues_text = "；".join(i.message for i in blocking_issues)
         state.tasklist_draft_v2 = await _generate_tasklist_draft(state, plan_text, is_revision=True, issues=issues_text)
         state.current_draft = state.tasklist_draft_v2
 
@@ -363,6 +433,27 @@ async def run_tasklist_agent(
         _emit_step_end(lifecycle, state.run_id, step,
                         "success" if state.validation_v2.is_valid else "error",
                         state.validation_v2.summary,
+                        duration_ms=int((time.time() - t0) * 1000))
+        step += 1
+
+        # ── Step 6.5: 修正效果评估 ──
+        _emit_step_start(lifecycle, state.run_id, step, "revision_eval", "修正效果评估")
+        t0 = time.time()
+
+        best_draft, best_validation, effect_note = _select_best_draft(state)
+        state.current_draft = best_draft
+        state.revision_effect = effect_note
+
+        # 评估状态：包含"有效"或"通过"为成功，包含"无效"或"回退"为警告
+        if "有效" in effect_note or "通过" in effect_note:
+            eval_status = "success"
+        elif "无改善" in effect_note:
+            eval_status = "success"  # 没变好但也没变差
+        else:
+            eval_status = "error"  # 越修越差，回退
+
+        _emit_step_end(lifecycle, state.run_id, step, eval_status,
+                        effect_note,
                         duration_ms=int((time.time() - t0) * 1000))
         step += 1
 
@@ -430,7 +521,7 @@ async def _generate_tasklist_draft(
 
     if is_revision and issues:
         user_content += (
-            f"\n\n上一版草稿存在以下结构问题，请修正:\n{issues}\n"
+            f"\n\n上一版草稿存在以下阻断性问题，请修正:\n{issues}\n"
             "请确保修正后的草稿通过结构校验。"
         )
 
@@ -444,10 +535,50 @@ async def _generate_tasklist_draft(
     return choice.message.content or ""
 
 
+def _select_best_draft(state: AgentState) -> tuple[str, ValidationResult, str]:
+    """
+    修正效果评估 — 比较 v1 和 v2 的校验结果，选择更好的草稿。
+
+    返回: (best_draft, best_validation, effect_note)
+    - effect_note 描述修正是否有效
+    """
+    v1 = state.validation_v1
+    v2 = state.validation_v2
+
+    if not v2:
+        # 没有修正过，直接用 v1
+        return state.tasklist_draft_v1, v1 or ValidationResult(is_valid=False, summary="无校验"), ""
+
+    # v2 通过校验 → 直接用 v2
+    if v2.is_valid:
+        return state.tasklist_draft_v2, v2, "修正有效：v2 通过校验"
+
+    v1_blocking = v1.blocking_count if v1 else 99
+    v2_blocking = v2.blocking_count if v2 else 99
+
+    # v2 阻断问题更少 → 用 v2
+    if v2_blocking < v1_blocking:
+        return state.tasklist_draft_v2, v2, f"修正部分有效：阻断问题 {v1_blocking} → {v2_blocking}"
+
+    # v2 阻断问题没变 → 用 v2（至少 warning 可能更少）
+    if v2_blocking == v1_blocking:
+        v1_warnings = v1.warning_count if v1 else 99
+        v2_warnings = v2.warning_count if v2 else 99
+        if v2_warnings < v1_warnings:
+            return state.tasklist_draft_v2, v2, f"修正有限改善：阻断问题不变，warning {v1_warnings} → {v2_warnings}"
+        return state.tasklist_draft_v2, v2, "修正无明显改善：阻断问题数未变"
+
+    # v2 阻断问题更多 → 越修越差，回退 v1
+    return state.tasklist_draft_v1, v1 or ValidationResult(is_valid=False), \
+        f"修正无效：v2 阻断问题更多（{v1_blocking} → {v2_blocking}），回退 v1"
+
+
 def _build_final_answer(state: AgentState) -> str:
-    """构建最终输出: 可复制草稿 + 校验结论 + 人工确认点"""
-    draft = state.current_draft or state.tasklist_draft_v1
-    final_validation = state.validation_v2 or state.validation_v1
+    """构建最终输出: 最优草稿 + 校验结论 + 修正效果 + 人工确认点"""
+    # 使用 _select_best_draft 选择最优草稿
+    best_draft, best_validation, effect_note = _select_best_draft(state)
+    state.current_draft = best_draft
+
     revision_note = ""
     if state.revision_count > 0:
         revision_note = f"\n- 自动修正次数: {state.revision_count}"
@@ -456,26 +587,43 @@ def _build_final_answer(state: AgentState) -> str:
         "---\n",
         "## 📋 最终输出\n",
         f"**来源版本方案**: `{state.version_plan_uri}`\n",
-        f"**结构校验状态**: {'✓ 通过' if (final_validation and final_validation.is_valid) else '✗ 未通过'}",
+        f"**结构校验状态**: {'✓ 通过' if (best_validation and best_validation.is_valid) else '✗ 未通过'}",
         revision_note + "\n",
-        "\n### 可复制 Tasklist 草稿\n",
-        "```markdown\n",
-        draft,
-        "\n```\n",
     ]
 
-    if final_validation and final_validation.issues:
+    # 修正效果
+    if effect_note:
+        parts.append(f"**修正效果**: {effect_note}\n")
+
+    parts.extend([
+        "\n### 可复制 Tasklist 草稿\n",
+        "```markdown\n",
+        best_draft,
+        "\n```\n",
+    ])
+
+    # 校验详情（区分 blocking 和 warning）
+    if best_validation and best_validation.issues:
         parts.append("\n### 校验详情\n")
-        if final_validation.is_valid:
+        if best_validation.is_valid:
             parts.append("结构完整，无阻断性问题。\n")
         else:
-            parts.append("阻断性问题:\n")
-            for issue in final_validation.issues:
-                parts.append(f"- `{issue.code}`: {issue.message}\n")
+            parts.append(f"阻断性问题（{best_validation.blocking_count} 项）:\n")
+            for issue in best_validation.issues:
+                if issue.severity == "blocking":
+                    parts.append(f"- 🔴 `{issue.code}`: {issue.message}\n")
+
+        if best_validation.warning_count > 0:
+            parts.append(f"\n警告（{best_validation.warning_count} 项，已忽略不触发修正）:\n")
+            for issue in best_validation.issues:
+                if issue.severity == "warning":
+                    parts.append(f"- 🟡 `{issue.code}`: {issue.message}\n")
 
     parts.append("\n### ⚠️ 人工确认点\n")
     parts.append("- 以上草稿由 Agent 生成，**未自动写入任何文件**\n")
     parts.append("- 请人工 review 后再决定是否落地\n")
     parts.append(f"- 本轮修正次数: {state.revision_count} / 1（上限）\n")
+    if state.revision_effect:
+        parts.append(f"- 修正效果: {state.revision_effect}\n")
 
     return "".join(parts)

@@ -6,6 +6,12 @@ from typing import Any, AsyncIterator
 from chat_session import create_chat_session
 from chat_orchestrator import orchestrate_chat
 from stream import StreamWriter, create_ndjson_stream
+from thread_state import (
+    thread_store,
+    session_store,
+    compact_thread,
+    TextCollectingWriter,
+)
 
 
 def resolve_skill(explicit_skill: str | None, user_message: str) -> str:
@@ -35,33 +41,109 @@ class ChatService:
         client_ip: str = "127.0.0.1",
     ) -> AsyncIterator[str]:
         """
-        处理聊天请求，返回 NDJSON 流
+        处理聊天请求，返回 NDJSON 流。
+
+        集成多会话短期记忆 (v0.4.4):
+        - 会话归属: createConversation (新建) 或 conversationId (已有)，互斥
+        - 上下文隔离: 模型上下文只来自当前选中会话的 ThreadState
+        - 写入隔离: 最终回复写入流开始时捕获的会话 (不随 UI 切换变动)
+        - 流级错误不写入记忆 (安全降级)
+        - 超 8 条触发 compaction
         """
         messages = request_body.get("messages", [])
         skill = request_body.get("skill")
         client_ip_req = request_body.get("clientIP") or client_ip
 
+        # ── 多会话参数 ──
+        session_id = request_body.get("sessionId", "")
+        conversation_id = request_body.get("conversationId", "")
+        create_conversation = request_body.get("createConversation", False)
+
         if not isinstance(messages, list):
             raise ValueError("messages 必须是数组")
 
-        # 提取结构化请求 (Composer chips/segments)
+        # 提取当前用户消息和结构化请求
         user_message = ""
         structured = None
+        current_user_msg = None
         if messages:
-            user_message = messages[-1].get("content", "")
-            structured = messages[-1].get("structured")
+            current_user_msg = messages[-1]
+            user_message = current_user_msg.get("content", "")
+            structured = current_user_msg.get("structured")
 
         resolved_skill = resolve_skill(skill, user_message)
 
-        session = create_chat_session(resolved_skill, messages)
+        # ── 会话归属解析 (服务端校验) ──
+        thread_state = None
+        resolved_conversation_id = ""
+
+        if session_id:
+            registry = session_store.get_or_create(session_id)
+
+            if create_conversation:
+                # 新建会话 (首条消息触发)
+                conv = registry.create(user_message[:40] if user_message else "新对话")
+                thread_store.get_or_create(conv.thread_id)
+                registry.select(conv.conversation_id)
+                resolved_conversation_id = conv.conversation_id
+                thread_state = thread_store.get(conv.thread_id)
+            elif conversation_id:
+                # 已有会话 — 服务端校验
+                conv = registry.get(conversation_id)
+                if conv:
+                    resolved_conversation_id = conv.conversation_id
+                    thread_state = thread_store.get_or_create(conv.thread_id)
+                    # touch 活跃时间
+                    registry.touch(conversation_id)
+
+        # ── 构建模型上下文 ──
+        if thread_state:
+            # 从 ThreadState 构建历史上下文 (纯文本，不含运行时状态)
+            context_messages = thread_state.build_model_context()
+            # 追加当前用户消息 (保留 structured/files 供工具增强和 Agent 检测)
+            if current_user_msg:
+                context_messages.append(current_user_msg)
+            session = create_chat_session(resolved_skill, context_messages)
+        else:
+            # 无会话归属，回退到前端 messages (兼容)
+            session = create_chat_session(resolved_skill, messages)
 
         # 将结构化请求传入 context，供 Agent Runtime 检测
-        agent_context = {"clientIP": client_ip_req}
+        agent_context: dict[str, Any] = {"clientIP": client_ip_req}
         if structured:
             agent_context["structured"] = structured
 
+        # ── 捕获流开始时的会话归属 (写入不串线) ──
+        write_conversation_id = resolved_conversation_id
+        write_thread_state = thread_state
+
         async def on_start(writer: StreamWriter) -> None:
-            await orchestrate_chat(session, writer, agent_context)
+            # 用 TextCollectingWriter 包装，收集最终文本
+            collector = TextCollectingWriter(writer)
+            await orchestrate_chat(session, collector, agent_context)
+
+            # ── 回合完成后写入 ThreadState ──
+            # 只在无流级错误时写入 (cancelled/failed 不写)
+            # 写入流开始时捕获的会话 (不随 UI 切换变动)
+            if write_thread_state and not collector.has_error():
+                final_text = collector.get_collected_text()
+
+                # 写入用户文本
+                write_thread_state.append("user", user_message)
+
+                # 写入助手最终文本
+                if final_text.strip():
+                    write_thread_state.append("assistant", final_text)
+
+                # 触发压缩 (超 8 条)
+                if write_thread_state.should_compact():
+                    await compact_thread(write_thread_state)
+
+                # touch 会话活跃时间
+                if write_conversation_id and session_id:
+                    registry = session_store.get(session_id)
+                    if registry:
+                        registry.touch(write_conversation_id)
 
         async for chunk_line in create_ndjson_stream(on_start):
             yield chunk_line

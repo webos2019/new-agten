@@ -20,6 +20,7 @@ load_dotenv()
 import tools  # noqa: F401
 from chat_service import create_chat_service
 from validators import validate_message_text, validate_file
+from thread_state import thread_store, session_store
 
 app = FastAPI(title="Code Assistant", version="0.1.0")
 
@@ -128,6 +129,89 @@ async def chat(request: Request):
             "Connection": "keep-alive",
         },
     )
+
+
+# ─── 会话 API (多会话短期记忆容器) ──────────────────────
+
+@app.get("/api/conversations")
+async def list_conversations(session_id: str = ""):
+    """获取会话注册表 (当前浏览器会话)"""
+    if not session_id:
+        return JSONResponse({"error": "session_id 必填"}, status_code=400)
+    registry = session_store.get_or_create(session_id)
+    return registry.to_dto()
+
+
+@app.post("/api/conversations")
+async def create_conversation(request: Request):
+    """创建新会话 (正式持久化, 加入注册表)"""
+    body = await request.json()
+    session_id = body.get("sessionId", "")
+    title = body.get("title", "新对话")
+    if not session_id:
+        return JSONResponse({"error": "sessionId 必填"}, status_code=400)
+    registry = session_store.get_or_create(session_id)
+    conv = registry.create(title)
+    # 创建对应的 ThreadState
+    thread_store.get_or_create(conv.thread_id)
+    registry.select(conv.conversation_id)
+    return {**conv.to_dto(), "threadId": conv.thread_id}
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, session_id: str = ""):
+    """获取会话详情 + ThreadState hydration (刷新恢复)"""
+    if not session_id:
+        return JSONResponse({"error": "session_id 必填"}, status_code=400)
+    registry = session_store.get(session_id)
+    if not registry:
+        return {"conversationId": conversation_id, "messages": [], "summary": "", "pinnedDecisions": [], "restored": False}
+    conv = registry.get(conversation_id)
+    if not conv:
+        return JSONResponse({"error": "会话不存在"}, status_code=404)
+    state = thread_store.get(conv.thread_id)
+    if not state:
+        return {"conversationId": conversation_id, "messages": [], "summary": "", "pinnedDecisions": [], "restored": False}
+    dto = state.to_hydration_dto()
+    dto["conversationId"] = conversation_id
+    dto["title"] = conv.title
+    return dto
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def update_conversation(conversation_id: str, request: Request):
+    """切换选中会话 / 重命名 / touch 活跃时间"""
+    body = await request.json()
+    session_id = body.get("sessionId", "")
+    if not session_id:
+        return JSONResponse({"error": "sessionId 必填"}, status_code=400)
+    registry = session_store.get_or_create(session_id)
+    # 重命名
+    if "title" in body:
+        registry.rename(conversation_id, body["title"])
+    # 切换选中 + touch 活跃时间
+    if body.get("select", False):
+        if not registry.select(conversation_id):
+            return JSONResponse({"error": "会话不存在"}, status_code=404)
+        registry.touch(conversation_id)
+    # 单独 touch (发送消息时)
+    if body.get("touch", False):
+        registry.touch(conversation_id)
+    return registry.to_dto()
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, session_id: str = ""):
+    """删除会话"""
+    if not session_id:
+        return JSONResponse({"error": "session_id 必填"}, status_code=400)
+    registry = session_store.get(session_id)
+    if not registry:
+        return {"ok": True}
+    thread_id = registry.delete(conversation_id)
+    if thread_id:
+        thread_store.delete(thread_id)
+    return {"ok": True, "selectedConversationId": registry.selected_conversation_id}
 
 
 @app.get("/api/health")

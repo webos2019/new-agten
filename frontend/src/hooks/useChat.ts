@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import type { ChatMessage, ChatBlock, ChatStatus, StructuredRequest, UploadedFile } from '../types'
 import { useStreamTextBuffer } from './useStreamTextBuffer'
 
@@ -40,17 +40,9 @@ export function useChat() {
 
     // ─── addChunk: text/reasoning 走缓冲，结构性 chunk 先 flush ──
     const addChunk = useCallback((chunk: any) => {
-        // 高频 delta 走缓冲
-        if (chunk.type === 'text') {
-            enqueue('text', chunk.content || '')
-            return
-        }
-        if (chunk.type === 'reasoning') {
-            enqueue('reasoning', chunk.content || '')
-            return
-        }
+        if (chunk.type === 'text') { enqueue('text', chunk.content || ''); return }
+        if (chunk.type === 'reasoning') { enqueue('reasoning', chunk.content || ''); return }
 
-        // 结构性 chunk 前先 flush 文本 buffer，保证顺序
         flush()
 
         setStreamingBlocks(prev => {
@@ -87,28 +79,18 @@ export function useChat() {
                         lastStep.title = chunk.title
                         lastStep.stepIndex = chunk.stepIndex
                     } else {
-                        next.push({
-                            type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex,
-                            actionType: chunk.actionType, title: chunk.title, status: 'pending',
-                            content: '',
-                        })
+                        next.push({ type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex, actionType: chunk.actionType, title: chunk.title, status: 'pending', content: '' })
                     }
                     break
                 }
                 case 'agent_step_end': {
-                    const matchingStep = [...next].reverse().find(
-                        b => b.type === 'agent_step' && b.runId === chunk.runId && b.stepIndex === chunk.stepIndex
-                    )
+                    const matchingStep = [...next].reverse().find(b => b.type === 'agent_step' && b.runId === chunk.runId && b.stepIndex === chunk.stepIndex)
                     if (matchingStep) {
                         matchingStep.status = chunk.status
                         matchingStep.summary = chunk.summary
                         matchingStep.durationMs = chunk.durationMs
                     } else {
-                        next.push({
-                            type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex,
-                            status: chunk.status, summary: chunk.summary, durationMs: chunk.durationMs,
-                            content: '',
-                        })
+                        next.push({ type: 'agent_step', runId: chunk.runId, stepIndex: chunk.stepIndex, status: chunk.status, summary: chunk.summary, durationMs: chunk.durationMs, content: '' })
                     }
                     break
                 }
@@ -125,12 +107,42 @@ export function useChat() {
         return msgs.slice(indices[indices.length - MAX_CONTEXT_ROUNDS])
     }, [])
 
+    // ─── 恢复会话 (从 hydration 数据加载消息) ──────────
+    const hydrate = useCallback((data: {
+        messages?: Array<{ id: string; role: string; text: string }>
+        summary?: string
+        pinnedDecisions?: string[]
+    }) => {
+        setMessages((data.messages || []).map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.text,
+        })))
+        setError(null)
+        setStreamingBlocks([])
+        setStreamingText('')
+        reset()
+        setStatus('idle')
+    }, [reset])
+
+    // ─── 清空到空白草稿 ────────────────────────────────
+    const clearToDraft = useCallback(() => {
+        setMessages([])
+        setStreamingBlocks([])
+        setStreamingText('')
+        setError(null)
+        reset()
+        setStatus('idle')
+        if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
+    }, [reset])
+
+    // ─── 发送消息 ────────────────────────────────────────────────────────────────────────────
     const sendMessage = useCallback(async (
         rawText: string,
         structured: StructuredRequest | null,
         mode: string,
         clientIP: string | null,
         uploadedFiles: UploadedFile[],
+        sessionContext?: { sessionId: string; conversationId?: string; createConversation?: boolean },
     ) => {
         if (!rawText.trim() && uploadedFiles.length === 0) return
         if (status === 'loading' || status === 'streaming') return
@@ -141,7 +153,7 @@ export function useChat() {
         setStatus('loading')
         setStreamingBlocks([])
         setStreamingText('')
-        reset() // 重置文本缓冲
+        reset()
 
         const userMessage: ChatMessage = {
             role: 'user',
@@ -151,7 +163,7 @@ export function useChat() {
         const updatedMessages = [...messages, userMessage]
         setMessages(updatedMessages)
 
-        const requestPayload = {
+        const requestPayload: Record<string, unknown> = {
             messages: [...messages, {
                 role: 'user',
                 content: rawText,
@@ -160,6 +172,15 @@ export function useChat() {
             }],
             skill: mode,
             clientIP,
+        }
+        // 传递会话归属
+        if (sessionContext?.sessionId) {
+            requestPayload.sessionId = sessionContext.sessionId
+            if (sessionContext.createConversation) {
+                requestPayload.createConversation = true
+            } else if (sessionContext.conversationId) {
+                requestPayload.conversationId = sessionContext.conversationId
+            }
         }
 
         try {
@@ -215,20 +236,14 @@ export function useChat() {
                 if (isDone) break
             }
 
-            // 流结束: flush 残留缓冲
             flushAndClear()
 
-            const assistantMessage: ChatMessage = {
-                role: 'assistant',
-                content: collectedText,
-                blocks: collectedBlocks,
-            }
+            const assistantMessage: ChatMessage = { role: 'assistant', content: collectedText, blocks: collectedBlocks }
             setMessages(prev => trimMsgs([...prev, assistantMessage]))
             setStreamingBlocks([])
             setStreamingText('')
             setStatus('idle')
         } catch (err: any) {
-            // 中断时保留已收到的半截内容，只 flush 缓冲
             flushAndClear()
             if (err.name === 'AbortError') { setStatus('idle'); return }
             setError(err.message || '未知错误')
@@ -241,20 +256,9 @@ export function useChat() {
 
     const cancelStream = useCallback(() => {
         if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
-        flushAndClear() // flush 残留缓冲，保留已收到的半截内容
+        flushAndClear()
         setStatus('idle')
     }, [flushAndClear])
-
-    const clearMessages = useCallback(() => {
-        if (status === 'loading' || status === 'streaming') return
-        setMessages([])
-        setStreamingBlocks([])
-        setStreamingText('')
-        setError(null)
-        reset()
-        setStatus('idle')
-        if (abortRef.current) { abortRef.current.abort(); abortRef.current = null }
-    }, [status, reset])
 
     const regenerate = useCallback(() => {
         if (status === 'loading' || status === 'streaming') return
@@ -284,7 +288,7 @@ export function useChat() {
     return {
         messages, status, error, isStreaming,
         streamingBlocks, streamingText,
-        sendMessage, cancelStream, clearMessages, regenerate, retry,
-        setStatus,
+        sendMessage, cancelStream, regenerate, retry,
+        hydrate, clearToDraft, setStatus,
     }
 }

@@ -62,7 +62,7 @@ const ConversationSidebar: React.FC<Props> = ({
                 <button
                     className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
                         isDraft
-                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(0,229,255,0.08)] text-[var(--cyan)]'
+                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(75,96,124,0.10)] text-[var(--cyan)]'
                             : 'border-[var(--cyan-border)] text-[var(--text-secondary)] hover:border-[var(--cyan-border-bright)] hover:text-[var(--cyan)]'
                     } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
                     onClick={onNewChat}
@@ -94,8 +94,8 @@ const ConversationSidebar: React.FC<Props> = ({
                 <button
                     className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
                         isDraft
-                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(0,229,255,0.08)] text-[var(--cyan)] shadow-[0_0_12px_var(--cyan-glow)]'
-                            : 'border-[var(--cyan-border)] bg-[rgba(0,229,255,0.03)] text-[var(--text-secondary)] hover:border-[var(--cyan-border-bright)] hover:bg-[rgba(0,229,255,0.06)] hover:text-[var(--cyan)]'
+                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(75,96,124,0.10)] text-[var(--cyan)] shadow-[0_0_12px_var(--cyan-glow)]'
+                            : 'border-[var(--cyan-border)] bg-[rgba(75,96,124,0.04)] text-[var(--text-secondary)] hover:border-[var(--cyan-border-bright)] hover:bg-[rgba(75,96,124,0.08)] hover:text-[var(--cyan)]'
                     } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
                     onClick={onNewChat}
                     disabled={disabled}
@@ -123,8 +123,8 @@ const ConversationSidebar: React.FC<Props> = ({
                                     key={conv.conversationId}
                                     className={`group relative cursor-pointer rounded-lg border px-3 py-2.5 transition-all ${
                                         isSelected
-                                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(0,229,255,0.06)] shadow-[0_0_8px_var(--cyan-glow)]'
-                                            : 'border-transparent hover:border-[var(--cyan-border)] hover:bg-[rgba(0,229,255,0.03)]'
+                                            ? 'border-[var(--cyan-border-bright)] bg-[rgba(75,96,124,0.08)] shadow-[0_0_8px_var(--cyan-glow)]'
+                                            : 'border-transparent hover:border-[var(--cyan-border)] hover:bg-[rgba(75,96,124,0.04)]'
                                     } ${disabled && !isSelected ? 'pointer-events-none opacity-50' : ''}`}
                                     onClick={() => !disabled && !isEditing && onSelect(conv.conversationId)}
                                 >

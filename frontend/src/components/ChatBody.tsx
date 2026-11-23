@@ -203,7 +203,7 @@ function renderMessage(msg: ChatMessage, isStreaming: boolean, sText: string | u
             filesHtml = (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                     {msg.files.map((f, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-white/20 px-2 py-0.5 text-xs">📄 {f.name}</span>
+                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-black/5 px-2 py-0.5 text-xs">📄 {f.name}</span>
                     ))}
                 </div>
             )

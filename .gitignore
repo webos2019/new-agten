@@ -7,7 +7,7 @@ __pycache__/
 dist/
 build/
 *.egg
-
+.env
 # Virtual Environment
 venv/
 env/
@@ -30,6 +30,12 @@ Thumbs.db
 # Logs
 *.log
 server.log
+
+# Runtime data (SQLite DB / Chroma vector store)
+data/
+
+# DevEco Code session files
+.deveco/
 
 # Type checking
 .pyi

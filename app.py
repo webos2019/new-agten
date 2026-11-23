@@ -21,8 +21,13 @@ import tools  # noqa: F401
 from chat_service import create_chat_service
 from validators import validate_message_text, validate_file
 from thread_state import thread_store, session_store
+from routers import kb as kb_router
+from routers import tts as tts_router
 
 app = FastAPI(title="Code Assistant", version="0.1.0")
+
+app.include_router(kb_router.router)
+app.include_router(tts_router.router)
 
 # 静态文件 - React 构建产物优先，旧版静态文件作为回退
 dist_dir = os.path.join(os.path.dirname(__file__), "static", "dist")

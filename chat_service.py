@@ -139,6 +139,9 @@ class ChatService:
                 if write_thread_state.should_compact():
                     await compact_thread(write_thread_state)
 
+                # 落盘 (append 增量; compact 内部截断后已自行落盘)
+                thread_store.persist_thread(write_thread_state.thread_id)
+
                 # touch 会话活跃时间
                 if write_conversation_id and session_id:
                     registry = session_store.get(session_id)

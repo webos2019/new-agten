@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Header from './components/Header'
+import Header, { type View } from './components/Header'
 import ChatBody from './components/ChatBody'
 import Footer from './components/Footer'
 import ConversationSidebar from './components/ConversationSidebar'
+import ErrorBoundary from './components/ErrorBoundary'
+import KnowledgeBase from './components/KnowledgeBase'
+import KbQA from './components/KbQA'
+import VoiceChat from './components/VoiceChat'
 import { useChat } from './hooks/useChat'
 import { useConversations } from './hooks/useConversations'
 import { useInputHistory } from './hooks/useInputHistory'
@@ -10,6 +14,7 @@ import { slashCommands, atReferences } from './types'
 import type { UploadedFile, StructuredRequest, AtReference } from './types'
 
 export default function App() {
+    const [view, setView] = useState<View>('chat')
     const [mode, setMode] = useState('utility-skill')
     const [clientIP, setClientIP] = useState<string | null>(null)
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
@@ -168,27 +173,45 @@ export default function App() {
                     onSetMode={setMode}
                     hasMessages={chat.messages.length > 0}
                     onRegenerate={handleRegenerate}
+                    view={view}
+                    onSetView={setView}
                 />
-                <ChatBody
-                    messages={chat.messages}
-                    isStreaming={chat.isStreaming}
-                    streamingText={chat.streamingText}
-                    streamingBlocks={chat.streamingBlocks}
-                    error={chat.error}
-                    mode={mode}
-                />
-                <Footer
-                    isStreaming={chat.isStreaming}
-                    isRetrying={isRetrying}
-                    slashCommands={slashCommands}
-                    atReferences={atRefs}
-                    onSend={handleSend}
-                    onFileDrop={handleFileDrop}
-                    onFileSelect={handleFileSelect}
-                    onFileRemove={handleFileRemove}
-                    uploadedFiles={uploadedFiles}
-                    onCancel={chat.cancelStream}
-                />
+                {view === 'kb' ? (
+                    <div className="flex-1 overflow-auto kb-view-container">
+                        <ErrorBoundary><KnowledgeBase sessionId={conversations.sessionId} /></ErrorBoundary>
+                    </div>
+                ) : view === 'kbqa' ? (
+                    <div className="flex-1 overflow-hidden kbqa-view-container">
+                        <ErrorBoundary><KbQA sessionId={conversations.sessionId} /></ErrorBoundary>
+                    </div>
+                ) : view === 'voice' ? (
+                    <div className="flex-1 overflow-hidden voicechat-view-container">
+                        <ErrorBoundary><VoiceChat sessionId={conversations.sessionId} /></ErrorBoundary>
+                    </div>
+                ) : (
+                    <>
+                        <ChatBody
+                            messages={chat.messages}
+                            isStreaming={chat.isStreaming}
+                            streamingText={chat.streamingText}
+                            streamingBlocks={chat.streamingBlocks}
+                            error={chat.error}
+                            mode={mode}
+                        />
+                        <Footer
+                            isStreaming={chat.isStreaming}
+                            isRetrying={isRetrying}
+                            slashCommands={slashCommands}
+                            atReferences={atRefs}
+                            onSend={handleSend}
+                            onFileDrop={handleFileDrop}
+                            onFileSelect={handleFileSelect}
+                            onFileRemove={handleFileRemove}
+                            uploadedFiles={uploadedFiles}
+                            onCancel={chat.cancelStream}
+                        />
+                    </>
+                )}
             </div>
         </div>
     )
